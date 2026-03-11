@@ -3,8 +3,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
+    restart: unless-stopped
     env_file:
       - .env.staging
+    extra_hosts:
+      # Lets the container reach services on the host (Linux) via `host.docker.internal`.
+      # Useful for relaying email through a host MTA (sendmail/postfix) without exposing it publicly.
+      - "host.docker.internal:host-gateway"
     environment:
       APP_ENV: staging
       APP_PORT: 3000

@@ -249,11 +249,24 @@ This is a temporary operational API until the manager UI supports custom message
   - `SMTP_FROM_EMAIL`
   - (Optionally) `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_NAME`
 
+Sendmail/postfix (host relay):
+- If your staging server has a local MTA (sendmail/postfix), configure it to accept SMTP on `127.0.0.1` (commonly port `25`).
+- Then set `SMTP_HOST=host.docker.internal`, `SMTP_PORT=25`, `SMTP_SECURE=false` in `.env.staging` and recreate the app container.
+
 ### Managed Postgres + SSL (DigitalOcean, etc.)
 If you use a managed database and see TLS errors like `SELF_SIGNED_CERT_IN_CHAIN`, use one of these approaches:
 
 - Easiest (encryption without certificate verification): set `sslmode=require` in `DATABASE_URL`.
 - Strict (verify server cert/hostname): set `sslmode=verify-full` and provide the CA via `DATABASE_SSL_CA_PEM` or `DATABASE_SSL_CA_FILE`.
+
+### Staging: start on boot (systemd)
+Optional helper unit lives in `deploy/systemd/volunteerflow.service`.
+
+1. Copy it to `/etc/systemd/system/volunteerflow.service`.
+2. Update `WorkingDirectory=` to your repo path.
+3. Enable + start:
+   - `sudo systemctl daemon-reload`
+   - `sudo systemctl enable --now volunteerflow`
 
 Email types currently sent:
 - Signup confirmation (includes cancel link)

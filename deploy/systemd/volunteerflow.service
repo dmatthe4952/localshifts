@@ -1,0 +1,16 @@
+[Unit]
+Description=VolunteerFlow (Docker Compose)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/root/projects/volunteerflow
+ExecStart=/usr/bin/docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
+ExecStop=/usr/bin/docker compose --env-file .env.staging -f docker-compose.staging.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
+
