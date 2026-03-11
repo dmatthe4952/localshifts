@@ -29,7 +29,11 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
     host: config.smtp.host,
     port: config.smtp.port,
     secure: config.smtp.secure,
-    auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined
+    auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
+    // Prevent hanging requests if the SMTP endpoint is unreachable or stalls.
+    connectionTimeout: 5_000,
+    greetingTimeout: 5_000,
+    socketTimeout: 10_000
   });
 
   await transporter.sendMail({
@@ -39,4 +43,3 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
     text: msg.text
   });
 }
-
