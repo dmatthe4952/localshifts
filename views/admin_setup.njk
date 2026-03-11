@@ -1,0 +1,31 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Admin Setup</h1>
+  <div class="panel">
+    <p class="muted">Create the initial Super Admin account.</p>
+    {% if error %}
+      <div class="flash err"><div>{{ error }}</div></div>
+    {% endif %}
+    <form class="form" method="post" action="/admin/setup">
+      <label>
+        <span>Email</span>
+        <input name="email" type="email" autocomplete="username" required />
+      </label>
+      <label>
+        <span>Display name</span>
+        <input name="displayName" required />
+      </label>
+      <label>
+        <span>Password (min 10 chars)</span>
+        <div class="pw">
+          <input name="password" type="password" autocomplete="new-password" required minlength="10" />
+          <button class="pw-btn" type="button" data-pw-toggle aria-label="Show password">Show</button>
+        </div>
+      </label>
+      <div class="actions">
+        <button class="btn primary" type="submit">Create Admin</button>
+      </div>
+      <p class="muted" style="margin-top:10px">On production, this route is guarded by `x-admin-token`.</p>
+    </form>
+  </div>
+{% endblock %}

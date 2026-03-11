@@ -1,0 +1,17 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Signup Cancelled</h1>
+  <div class="panel">
+    <p>You have been removed from the shift.</p>
+    <div class="row">
+      <span class="label">Event</span>
+      <span class="value">{{ signup.eventTitle }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Shift</span>
+      <span class="value">{{ signup.shiftRole }} • {{ signup.shiftDate }} • {{ signup.shiftTime }}</span>
+    </div>
+    <p><a href="/">Back to events</a></p>
+  </div>
+{% endblock %}
+

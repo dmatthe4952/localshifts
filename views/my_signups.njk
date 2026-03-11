@@ -1,0 +1,81 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>My Signups</h1>
+
+  {% if notice %}
+    <div class="flash ok"><div>{{ notice }}</div></div>
+  {% endif %}
+
+  <div class="panel">
+    <p class="muted">Enter your email and we’ll send a link to view your upcoming signups.</p>
+    <form class="form" method="post" action="/my/request">
+      <label>
+        <span>Email</span>
+        <input name="email" type="email" autocomplete="email" required {% if viewerEmail %}value="{{ viewerEmail }}"{% endif %} />
+      </label>
+      <div class="actions">
+        <button class="btn primary" type="submit">Email Me a Link</button>
+        {% if viewerEmail %}
+          <button class="btn" formmethod="post" formaction="/my/clear" type="submit">Clear this device</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top:12px">
+    <p class="muted">Already have the link? Paste it here.</p>
+    <form class="form" method="post" action="/my/verify">
+      <label>
+        <span>Link or token</span>
+        <input name="token" placeholder="https://…/my/verify/… or 64-char token" required />
+      </label>
+      <label style="margin-top:10px">
+        <span><input type="checkbox" name="remember" /> Remember this device</span>
+      </label>
+      <div class="actions">
+        <button class="btn primary" type="submit">View My Signups</button>
+      </div>
+    </form>
+  </div>
+
+  {% if not viewerEmail %}
+    <div class="panel" style="margin-top:12px">
+      <p class="muted">After you sign up for a shift, this page can also show your upcoming signups on this device.</p>
+      <p><a href="/">Browse events</a></p>
+    </div>
+  {% else %}
+    <div class="panel">
+      <div class="row">
+        <span class="label">Email</span>
+        <span class="value">{{ viewerEmail }}</span>
+      </div>
+    </div>
+
+    <h2>Upcoming</h2>
+    {% if signups.length == 0 %}
+      <div class="panel"><p class="muted">No upcoming active signups.</p></div>
+    {% else %}
+      <div class="stack">
+        {% for s in signups %}
+          <div class="panel">
+            <div class="title"><a href="{{ s.eventUrl }}">{{ s.eventTitle }}</a></div>
+            <div class="meta">{{ s.organizationName }}</div>
+            {% if s.eventCancelledAt %}
+              <div class="flash err" style="margin-top:10px">
+                <div><strong>Event cancelled.</strong> {% if s.eventCancellationMessage %}{{ s.eventCancellationMessage }}{% endif %}</div>
+              </div>
+            {% endif %}
+            <div class="muted" style="margin-top:8px">{{ s.shiftRole }} • {{ s.shiftDate }} • {{ s.shiftTime }}</div>
+            {% if s.cancelUrl %}
+              <div style="margin-top:12px">
+                <a class="btn danger" href="{{ s.cancelUrl }}">Cancel Signup</a>
+              </div>
+            {% else %}
+              <div class="muted" style="margin-top:12px">Cancel link unavailable (check your email).</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Signups</h1>
+  <div class="crumbs">
+    <a href="/manager/events">My events</a>
+    <span class="sep">/</span>
+    <a href="/manager/events/{{ event.id }}/edit">{{ event.title }}</a>
+    <span class="sep">/</span>
+    <span>Signups</span>
+  </div>
+
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+  {% if ok %}
+    <div class="flash ok"><div>{{ ok }}</div></div>
+  {% endif %}
+
+  <div class="panel">
+    <div class="row">
+      <span class="label">Event</span>
+      <span class="value">{{ event.title }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Export</span>
+      <span class="value"><a class="btn" href="/manager/events/{{ event.id }}/signups.csv">Download CSV</a></span>
+    </div>
+  </div>
+
+  {% if shifts.length == 0 %}
+    <div class="panel" style="margin-top:14px"><p class="muted">No shifts yet.</p></div>
+  {% else %}
+    <div class="stack" style="margin-top:14px">
+      {% for shift in shifts %}
+        <div class="panel">
+          <div class="shift-top">
+            <div>
+              <div class="title">{{ shift.roleName }}</div>
+              <div class="meta">{{ shift.shiftDate }} • {{ shift.startTime }} – {{ shift.endTime }}</div>
+              <div class="muted" style="margin-top:6px">Active signups: {{ shift.activeCount }} / {{ shift.maxVolunteers }}</div>
+            </div>
+          </div>
+
+          <details style="margin-top:10px">
+            <summary class="btn">Add Manual Signup</summary>
+            <form class="form" method="post" action="/manager/events/{{ event.id }}/signups/add">
+              <input type="hidden" name="shiftId" value="{{ shift.id }}" />
+              <div class="grid2">
+                <label>
+                  <span>First name</span>
+                  <input name="firstName" required />
+                </label>
+                <label>
+                  <span>Last name</span>
+                  <input name="lastName" required />
+                </label>
+              </div>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" required />
+              </label>
+              <div class="actions">
+                <button class="btn primary" type="submit">Add</button>
+              </div>
+            </form>
+          </details>
+
+          {% if shift.signups.length == 0 %}
+            <p class="muted" style="margin-top:12px">No signups yet.</p>
+          {% else %}
+            <div class="table" style="margin-top:12px">
+              <div class="trow thead">
+                <div>Name</div>
+                <div>Email</div>
+                <div>When</div>
+                <div>Status</div>
+                <div></div>
+              </div>
+              {% for s in shift.signups %}
+                <div class="trow">
+                  <div>{{ s.firstName }} {{ s.lastName }}</div>
+                  <div class="muted">{{ s.email }}</div>
+                  <div class="muted">{{ s.createdAt }}</div>
+                  <div>
+                    {% if s.status == 'active' %}
+                      <span class="badge ok">Active</span>
+                    {% else %}
+                      <span class="badge danger">Cancelled</span>
+                    {% endif %}
+                  </div>
+                  <div style="text-align:right">
+                    {% if s.status == 'active' %}
+                      <form method="post" action="/manager/signups/{{ s.id }}/cancel">
+                        <input type="hidden" name="eventId" value="{{ event.id }}" />
+                        <button class="btn danger" type="submit">Remove</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}
+

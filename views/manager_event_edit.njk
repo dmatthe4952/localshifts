@@ -1,0 +1,188 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Edit Event</h1>
+  <div class="crumbs">
+    <a href="/manager/events">My events</a>
+    <span class="sep">/</span>
+    <span>{{ event.title }}</span>
+  </div>
+
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+  {% if ok %}
+    <div class="flash ok"><div>{{ ok }}</div></div>
+  {% endif %}
+
+  {% if event.cancelledAt %}
+    <div class="flash err">
+      <div><strong>Event cancelled.</strong> {% if event.cancellationMessage %}{{ event.cancellationMessage }}{% endif %}</div>
+    </div>
+  {% endif %}
+
+  <div class="panel">
+    <form class="form" method="post" action="/manager/events/{{ event.id }}/edit">
+      <label>
+        <span>Title</span>
+        <input name="title" required maxlength="200" value="{{ event.title }}" />
+      </label>
+      <label>
+        <span>Organization</span>
+        <select name="organizationId" required>
+          {% for o in orgs %}
+            <option value="{{ o.id }}" {% if o.id == event.organizationId %}selected{% endif %}>{{ o.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="grid2">
+        <label>
+          <span>Start date</span>
+          <input name="startDate" type="date" required value="{{ event.startDate }}" />
+        </label>
+        <label>
+          <span>End date</span>
+          <input name="endDate" type="date" required value="{{ event.endDate }}" />
+        </label>
+      </div>
+      <label>
+        <span>Description</span>
+        <textarea name="description" rows="6">{{ event.description }}</textarea>
+      </label>
+      <div class="grid2">
+        <label>
+          <span>Location name</span>
+          <input name="locationName" maxlength="200" value="{{ event.locationName }}" />
+        </label>
+        <label>
+          <span>Google Maps URL</span>
+          <input name="locationMapUrl" maxlength="500" value="{{ event.locationMapUrl }}" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Save</button>
+        <a class="btn" href="/manager/events/{{ event.id }}/signups">View Signups</a>
+        {% if event.isPublished %}
+          <button class="btn" formmethod="post" formaction="/manager/events/{{ event.id }}/unpublish" type="submit">Unpublish</button>
+        {% else %}
+          <button class="btn" formmethod="post" formaction="/manager/events/{{ event.id }}/publish" type="submit">Publish</button>
+        {% endif %}
+        {% if not event.cancelledAt %}
+          <a class="btn danger" href="/manager/events/{{ event.id }}/cancel">Cancel Event</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <h2 style="margin-top:18px">Shifts</h2>
+  {% if shifts.length == 0 %}
+    <div class="panel"><p class="muted">No shifts yet. Add one below.</p></div>
+  {% else %}
+    <div class="stack">
+      {% for s in shifts %}
+        <div class="panel" id="shift-{{ s.id }}">
+          <div class="title">{{ s.roleName }}</div>
+          <div class="meta">{{ s.shiftDate }} • {{ s.startTime }} – {{ s.endTime }}</div>
+          <div class="muted" style="margin-top:8px">
+            Capacity: {{ s.maxVolunteers }} (min {{ s.minVolunteers }})
+            {% if not s.isActive %} • Inactive{% endif %}
+          </div>
+          <div class="actions" style="margin-top:12px">
+            <form method="post" action="/manager/shifts/{{ s.id }}/toggle" style="display:inline">
+              <button class="btn" type="submit">{% if s.isActive %}Deactivate{% else %}Activate{% endif %}</button>
+            </form>
+            <details style="display:inline">
+              <summary class="btn">Edit</summary>
+              <form class="form" method="post" action="/manager/shifts/{{ s.id }}/update">
+                <input type="hidden" name="eventId" value="{{ event.id }}" />
+                <div class="grid2">
+                  <label>
+                    <span>Role name</span>
+                    <input name="roleName" required maxlength="120" value="{{ s.roleName }}" />
+                  </label>
+                  <label>
+                    <span>Date</span>
+                    <input name="shiftDate" type="date" required value="{{ s.shiftDate }}" />
+                  </label>
+                </div>
+                <label>
+                  <span>Role description</span>
+                  <input name="roleDescription" maxlength="500" value="{{ s.roleDescription }}" />
+                </label>
+                <div class="grid2">
+                  <label>
+                    <span>Start time</span>
+                    <input name="startTime" type="time" required value="{{ s.startTime }}" />
+                  </label>
+                  <label>
+                    <span>Duration (minutes)</span>
+                    <input name="durationMinutes" type="number" min="15" step="15" required value="{{ s.durationMinutes }}" />
+                  </label>
+                </div>
+                <div class="grid2">
+                  <label>
+                    <span>Min volunteers</span>
+                    <input name="minVolunteers" type="number" min="0" step="1" required value="{{ s.minVolunteers }}" />
+                  </label>
+                  <label>
+                    <span>Max volunteers</span>
+                    <input name="maxVolunteers" type="number" min="1" step="1" required value="{{ s.maxVolunteers }}" />
+                  </label>
+                </div>
+                <div class="actions">
+                  <button class="btn primary" type="submit">Save Shift</button>
+                </div>
+              </form>
+            </details>
+            <form method="post" action="/manager/shifts/{{ s.id }}/delete" style="display:inline">
+              <input type="hidden" name="eventId" value="{{ event.id }}" />
+              <button class="btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <h2 style="margin-top:18px">Add Shift</h2>
+  <div class="panel">
+    <form class="form" method="post" action="/manager/events/{{ event.id }}/shifts">
+      <div class="grid2">
+        <label>
+          <span>Role name</span>
+          <input name="roleName" required maxlength="120" />
+        </label>
+        <label>
+          <span>Date</span>
+          <input name="shiftDate" type="date" required value="{{ event.startDate }}" />
+        </label>
+      </div>
+      <label>
+        <span>Role description</span>
+        <input name="roleDescription" maxlength="500" />
+      </label>
+      <div class="grid2">
+        <label>
+          <span>Start time</span>
+          <input name="startTime" type="time" required />
+        </label>
+        <label>
+          <span>Duration (minutes)</span>
+          <input name="durationMinutes" type="number" min="15" step="15" required value="60" />
+        </label>
+      </div>
+      <div class="grid2">
+        <label>
+          <span>Min volunteers</span>
+          <input name="minVolunteers" type="number" min="0" step="1" required value="0" />
+        </label>
+        <label>
+          <span>Max volunteers</span>
+          <input name="maxVolunteers" type="number" min="1" step="1" required value="1" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Add Shift</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

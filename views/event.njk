@@ -1,0 +1,111 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <div class="crumbs">
+    <a href="/">All events</a>
+    <span class="sep">/</span>
+    <span>{{ event.title }}</span>
+  </div>
+
+  <div class="panel">
+    <h1>{{ event.title }}</h1>
+    <div class="meta">{{ event.organizationName }} • {{ event.dateRange }}</div>
+
+    {% if event.cancelledAt %}
+      <div class="flash err" style="margin-top:14px">
+        <div><strong>This event has been cancelled.</strong> {% if event.cancellationMessage %}{{ event.cancellationMessage }}{% endif %}</div>
+      </div>
+    {% endif %}
+
+    {% if event.locationName %}
+      <div class="row">
+        <span class="label">Location</span>
+        <span class="value">
+          {{ event.locationName }}
+          {% if event.locationMapUrl %}
+            <span class="sep">·</span>
+            <a href="{{ event.locationMapUrl }}" target="_blank" rel="noopener">View on Google Maps</a>
+          {% endif %}
+        </span>
+      </div>
+    {% endif %}
+
+    {% if event.descriptionHtml %}
+      <div class="prose">{{ event.descriptionHtml | safe }}</div>
+    {% endif %}
+  </div>
+
+  {% if flash %}
+    <div class="flash {{ flash.type }}">
+      <div>{{ flash.message }}</div>
+    </div>
+  {% endif %}
+
+  <h2>Shifts</h2>
+  {% if event.shifts.length == 0 %}
+    <div class="panel"><p class="muted">No active shifts for this event.</p></div>
+  {% else %}
+    <div class="stack">
+      {% for shift in event.shifts %}
+        <div class="panel" id="shift-{{ shift.id }}">
+          <div class="shift-top">
+            <div>
+              <div class="title">{{ shift.roleName }}</div>
+              <div class="meta">{{ shift.date }} • {{ shift.startTime }} – {{ shift.endTime }}</div>
+              {% if shift.roleDescription %}
+                <div class="muted" style="margin-top:6px">{{ shift.roleDescription }}</div>
+              {% endif %}
+            </div>
+            <div class="right">
+              {% if shift.isFull %}
+                <div class="badge danger">Full</div>
+              {% else %}
+                <div class="badge ok">{{ shift.remaining }} open</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="shift-actions">
+            {% if shift.viewerSignup.isSignedUp %}
+              <div class="muted">
+                You’re signed up.
+                {% if shift.viewerSignup.cancelUrl %}
+                  <a href="{{ shift.viewerSignup.cancelUrl }}">Cancel</a>
+                {% endif %}
+              </div>
+            {% endif %}
+            {% if event.cancelledAt %}
+              <span class="btn" aria-disabled="true">Event Cancelled</span>
+            {% elseif shift.isFull %}
+              <span class="btn" aria-disabled="true">Shift Full</span>
+            {% elseif shift.viewerSignup.isSignedUp %}
+              <span class="btn" aria-disabled="true">Signed Up</span>
+            {% else %}
+              <details>
+                <summary class="btn">Sign Me Up</summary>
+                <form class="form" method="post" action="{{ event.url }}/shifts/{{ shift.id }}/signup">
+                  <div class="grid2">
+                    <label>
+                      <span>First name</span>
+                      <input name="firstName" autocomplete="given-name" required />
+                    </label>
+                    <label>
+                      <span>Last name</span>
+                      <input name="lastName" autocomplete="family-name" required />
+                    </label>
+                  </div>
+                  <label>
+                    <span>Email</span>
+                    <input name="email" type="email" autocomplete="email" required />
+                  </label>
+                  <div class="actions">
+                    <button class="btn primary" type="submit">Confirm Signup</button>
+                  </div>
+                </form>
+              </details>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

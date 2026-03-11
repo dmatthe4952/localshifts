@@ -1,0 +1,55 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Organizations</h1>
+
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+
+  <div class="panel">
+    <h2 style="margin-top:0">Create Organization</h2>
+    <form class="form" method="post" action="/admin/organizations">
+      <div class="grid2">
+        <label>
+          <span>Name</span>
+          <input name="name" required maxlength="120" />
+        </label>
+        <label>
+          <span>Slug</span>
+          <input name="slug" required maxlength="60" placeholder="e.g. greenville-food-bank" />
+        </label>
+      </div>
+      <div class="grid2">
+        <label>
+          <span>Primary color</span>
+          <input name="primaryColor" maxlength="7" placeholder="#2E86C1" />
+        </label>
+        <label>
+          <span>Contact email</span>
+          <input name="contactEmail" type="email" maxlength="120" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Create</button>
+      </div>
+    </form>
+  </div>
+
+  <h2 style="margin-top:18px">All Organizations</h2>
+  {% if orgs.length == 0 %}
+    <div class="panel"><p class="muted">No organizations yet.</p></div>
+  {% else %}
+    <div class="stack">
+      {% for o in orgs %}
+        <div class="panel">
+          <div class="title">{{ o.name }}</div>
+          <div class="meta">Slug: {{ o.slug }}</div>
+          {% if o.contactEmail %}
+            <div class="muted" style="margin-top:8px">Contact: {{ o.contactEmail }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}
+

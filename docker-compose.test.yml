@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: volunteerflow_test
+      POSTGRES_USER: volunteerflow
+      POSTGRES_PASSWORD: volunteerflow_password
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U volunteerflow -d volunteerflow_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  test:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -lc "npm install --no-package-lock && npm run migrate && npm test"
+    environment:
+      APP_ENV: test
+      APP_PORT: 3000
+      APP_URL: http://localhost:3000
+      APP_TIMEZONE: America/New_York
+      DATABASE_URL: postgres://volunteerflow:volunteerflow_password@db:5432/volunteerflow_test
+      SESSION_SECRET: test-only-change-me
+      ADMIN_TOKEN: test-ops-change-me
+      APP_LOG_FILE: ""
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy

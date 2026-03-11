@@ -1,0 +1,38 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>My Signups (One-Time)</h1>
+  <div class="panel">
+    <div class="row">
+      <span class="label">Email</span>
+      <span class="value">{{ viewerEmail }}</span>
+    </div>
+    <p class="muted" style="margin-top:10px">This view is not saved on this device. To view again later, request a new link.</p>
+    <p style="margin-top:10px"><a href="/my">Back to My Signups</a></p>
+  </div>
+
+  <h2>Upcoming</h2>
+  {% if signups.length == 0 %}
+    <div class="panel"><p class="muted">No upcoming active signups.</p></div>
+  {% else %}
+    <div class="stack">
+      {% for s in signups %}
+        <div class="panel">
+          <div class="title"><a href="{{ s.eventUrl }}">{{ s.eventTitle }}</a></div>
+          <div class="meta">{{ s.organizationName }}</div>
+          {% if s.eventCancelledAt %}
+            <div class="flash err" style="margin-top:10px">
+              <div><strong>Event cancelled.</strong> {% if s.eventCancellationMessage %}{{ s.eventCancellationMessage }}{% endif %}</div>
+            </div>
+          {% endif %}
+          <div class="muted" style="margin-top:8px">{{ s.shiftRole }} • {{ s.shiftDate }} • {{ s.shiftTime }}</div>
+          {% if s.cancelUrl %}
+            <div style="margin-top:12px">
+              <a class="btn danger" href="{{ s.cancelUrl }}">Cancel Signup</a>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}
+

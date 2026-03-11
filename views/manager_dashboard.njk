@@ -1,0 +1,28 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Manager Dashboard</h1>
+  <div class="panel">
+    <div class="meta">Signed in as {{ currentUser.displayName }}</div>
+    <div class="actions" style="margin-top:12px">
+      <a class="btn primary" href="/manager/events">Manage Events</a>
+    </div>
+  </div>
+
+  <h2 style="margin-top:18px">My Events</h2>
+  {% if events.length == 0 %}
+    <div class="panel"><p class="muted">No events yet.</p></div>
+  {% else %}
+    <div class="stack">
+      {% for e in events %}
+        <div class="panel">
+          <div class="title"><a href="{{ e.publicUrl }}">{{ e.title }}</a></div>
+          <div class="meta">{{ e.dateRange }}</div>
+          <div class="muted" style="margin-top:8px">
+            {% if e.isPublished %}Published{% else %}Draft{% endif %}
+            {% if e.cancelledAt %} • Cancelled{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

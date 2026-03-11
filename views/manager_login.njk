@@ -1,0 +1,25 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Manager Login</h1>
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+  <div class="panel">
+    <form class="form" method="post" action="/manager/login">
+      <label>
+        <span>Email</span>
+        <input name="email" type="email" autocomplete="username" required />
+      </label>
+      <label>
+        <span>Password</span>
+        <div class="pw">
+          <input name="password" type="password" autocomplete="current-password" required />
+          <button class="pw-btn" type="button" data-pw-toggle aria-label="Show password">Show</button>
+        </div>
+      </label>
+      <div class="actions">
+        <button class="btn primary" type="submit">Sign In</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

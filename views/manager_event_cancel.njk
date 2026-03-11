@@ -1,0 +1,42 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Cancel Event</h1>
+  <div class="crumbs">
+    <a href="/manager/events">My events</a>
+    <span class="sep">/</span>
+    <a href="/manager/events/{{ event.id }}/edit">{{ event.title }}</a>
+    <span class="sep">/</span>
+    <span>Cancel</span>
+  </div>
+
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+
+  {% if event.cancelledAt %}
+    <div class="flash err">
+      <div><strong>This event is already cancelled.</strong></div>
+    </div>
+    <div class="panel">
+      {% if event.cancellationMessage %}
+        <p class="muted">{{ event.cancellationMessage }}</p>
+      {% endif %}
+      <p><a class="btn" href="/manager/events/{{ event.id }}/edit">Back</a></p>
+    </div>
+  {% else %}
+    <div class="panel">
+      <p class="muted">This will mark the event as cancelled and notify all active signups for the event.</p>
+      <form class="form" method="post" action="/manager/events/{{ event.id }}/cancel">
+        <label>
+          <span>Cancellation message (sent to volunteers)</span>
+          <textarea name="message" rows="5" required maxlength="4000" placeholder="Reason for cancellation…"></textarea>
+        </label>
+        <div class="actions">
+          <button class="btn danger" type="submit">Cancel Event & Notify</button>
+          <a class="btn" href="/manager/events/{{ event.id }}/edit">Nevermind</a>
+        </div>
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}
+

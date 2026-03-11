@@ -1,0 +1,49 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Volunteer Opportunities</h1>
+  <p>Sign up for a shift—no account required.</p>
+
+  {% if events.length == 0 %}
+    <div class="panel">
+      <p class="muted">No published events yet.</p>
+      {% if showSeedHint %}
+        <p class="muted">Seed demo data: <code>docker compose exec app npm run seed</code></p>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="grid">
+      {% for event in events %}
+        <a class="card" href="{{ event.url }}">
+          <div class="card-hd">
+            <div class="title">{{ event.title }}</div>
+            <div class="meta">{{ event.organizationName }}</div>
+          </div>
+          <div class="card-bd">
+            <div class="row">
+              <span class="label">When</span>
+              <span class="value">{{ event.dateRange }}</span>
+            </div>
+            {% if event.locationName %}
+              <div class="row">
+                <span class="label">Where</span>
+                <span class="value">{{ event.locationName }}</span>
+              </div>
+            {% endif %}
+            <div class="row">
+              <span class="label">Open slots</span>
+              <span class="value">
+                {% if event.cancelledAt %}
+                  <span class="badge danger">Cancelled</span>
+                {% elseif event.isFull %}
+                  <span class="badge danger">Full</span>
+                {% else %}
+                  <span class="badge ok">{{ event.openSlots }}</span>
+                {% endif %}
+              </span>
+            </div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

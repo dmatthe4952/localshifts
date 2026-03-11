@@ -1,0 +1,31 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Cancel Signup</h1>
+
+  <div class="panel">
+    <div class="row">
+      <span class="label">Event</span>
+      <span class="value">{{ signup.eventTitle }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Shift</span>
+      <span class="value">{{ signup.shiftRole }} • {{ signup.shiftDate }} • {{ signup.shiftTime }}</span>
+    </div>
+    <div class="row">
+      <span class="label">Volunteer</span>
+      <span class="value">{{ signup.volunteerName }} ({{ signup.volunteerEmail }})</span>
+    </div>
+  </div>
+
+  <form class="panel form" method="post" action="/cancel/{{ token }}">
+    <label>
+      <span>Optional note (goes to the event manager)</span>
+      <textarea name="note" rows="4" maxlength="2000" placeholder="Reason for cancelling…"></textarea>
+    </label>
+    <div class="actions">
+      <button class="btn danger" type="submit">Yes, Cancel My Signup</button>
+      <a class="btn" href="/">Nevermind</a>
+    </div>
+  </form>
+{% endblock %}
+

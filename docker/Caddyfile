@@ -1,0 +1,9 @@
+{
+  # Staging/prod only; not used in local dev compose.
+  email you@example.com
+}
+
+www.trtechapp.com {
+  encode gzip
+  reverse_proxy app:3000
+}

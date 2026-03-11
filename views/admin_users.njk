@@ -1,0 +1,52 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Users</h1>
+
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+
+  <div class="panel">
+    <h2 style="margin-top:0">Create Event Manager</h2>
+    <form class="form" method="post" action="/admin/users">
+      <div class="grid2">
+        <label>
+          <span>Email</span>
+          <input name="email" type="email" required />
+        </label>
+        <label>
+          <span>Display name</span>
+          <input name="displayName" required />
+        </label>
+      </div>
+      <label>
+        <span>Password (min 10 chars)</span>
+        <div class="pw">
+          <input name="password" type="password" required minlength="10" />
+          <button class="pw-btn" type="button" data-pw-toggle aria-label="Show password">Show</button>
+        </div>
+      </label>
+      <div class="actions">
+        <button class="btn primary" type="submit">Create Manager</button>
+      </div>
+    </form>
+  </div>
+
+  <h2 style="margin-top:18px">Event Managers</h2>
+  {% if users.length == 0 %}
+    <div class="panel"><p class="muted">No event managers yet.</p></div>
+  {% else %}
+    <div class="stack">
+      {% for u in users %}
+        <div class="panel">
+          <div class="title">{{ u.displayName }}</div>
+          <div class="meta">{{ u.email }}</div>
+          <div class="muted" style="margin-top:8px">Status: {% if u.isActive %}Active{% else %}Inactive{% endif %}</div>
+          <form method="post" action="/admin/users/{{ u.id }}/toggle" style="margin-top:12px">
+            <button class="btn" type="submit">{% if u.isActive %}Deactivate{% else %}Activate{% endif %}</button>
+          </form>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

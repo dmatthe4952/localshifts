@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VolunteerFlow</title>
+    <link rel="stylesheet" href="/public/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <nav class="nav">
+          <a href="/" class="brand">VolunteerFlow</a>
+          <div class="nav-links">
+            <a href="/my">My Signups</a>
+            {% if currentUser %}
+              {% if currentUser.role == 'super_admin' %}
+                <a href="/admin/dashboard">Admin</a>
+              {% endif %}
+              {% if currentUser.role == 'event_manager' %}
+                <a href="/manager/dashboard">Manager</a>
+              {% endif %}
+              <form method="post" action="/logout" style="display:inline">
+                <button class="btn" type="submit" style="padding:6px 10px">Logout</button>
+              </form>
+            {% else %}
+              <a href="/admin/login">Admin</a>
+              <a href="/manager/login">Manager</a>
+            {% endif %}
+          </div>
+        </nav>
+      </div>
+    </header>
+    <main class="wrap">
+      {% block content %}{% endblock %}
+    </main>
+    <script>
+      (function () {
+        function toggle(btn) {
+          var wrap = btn && btn.closest && btn.closest('.pw');
+          if (!wrap) return;
+          var input = wrap.querySelector('input');
+          if (!input) return;
+          var showing = input.type === 'text';
+          input.type = showing ? 'password' : 'text';
+          btn.textContent = showing ? 'Show' : 'Hide';
+          btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+        }
+        document.addEventListener('click', function (e) {
+          var t = e.target;
+          if (t && t.matches && t.matches('[data-pw-toggle]')) toggle(t);
+        });
+      })();
+    </script>
+  </body>
+</html>

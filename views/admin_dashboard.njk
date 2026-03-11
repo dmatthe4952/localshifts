@@ -1,0 +1,25 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Admin Dashboard</h1>
+  <div class="grid">
+    <div class="panel">
+      <div class="label">Events</div>
+      <div class="title" style="font-size:28px">{{ stats.events }}</div>
+    </div>
+    <div class="panel">
+      <div class="label">Upcoming shifts (14d)</div>
+      <div class="title" style="font-size:28px">{{ stats.upcomingShifts }}</div>
+    </div>
+    <div class="panel">
+      <div class="label">Signups (30d)</div>
+      <div class="title" style="font-size:28px">{{ stats.signups30d }}</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="actions">
+      <a class="btn primary" href="/admin/users">Manage Users</a>
+      <a class="btn" href="/admin/organizations">Organizations</a>
+    </div>
+  </div>
+{% endblock %}

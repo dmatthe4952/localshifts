@@ -1,0 +1,48 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Create Event</h1>
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+
+  <div class="panel">
+    <form class="form" method="post" action="/manager/events/new">
+      <label>
+        <span>Title</span>
+        <input name="title" required maxlength="200" />
+      </label>
+      <label>
+        <span>Organization</span>
+        <select name="organizationId" required>
+          <option value="" disabled selected>Select…</option>
+          {% for o in orgs %}
+            <option value="{{ o.id }}">{{ o.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Date</span>
+        <input name="date" type="date" required />
+      </label>
+      <label>
+        <span>Description</span>
+        <textarea name="description" rows="6" placeholder="Details for volunteers…"></textarea>
+      </label>
+      <div class="grid2">
+        <label>
+          <span>Location name</span>
+          <input name="locationName" maxlength="200" />
+        </label>
+        <label>
+          <span>Google Maps URL</span>
+          <input name="locationMapUrl" maxlength="500" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Create Draft</button>
+        <a class="btn" href="/manager/events">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
