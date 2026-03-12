@@ -187,6 +187,20 @@ Notes:
 - `GET /healthz`: basic “process is up” check (public).
 - `GET /ops/health`: checks DB connectivity (requires header `x-admin-token: $ADMIN_TOKEN`).
 
+### Admin token in shell (ops convenience)
+For operators who have access to the server repo folder, it can be convenient to have `ADMIN_TOKEN` in their shell environment for ops endpoints.
+
+Recommended approach:
+1. Copy `deploy/shell/codeSnippetForbashrc.example` to `codeSnippetForbashrc` in the repo root and lock it down:
+   - `cp deploy/shell/codeSnippetForbashrc.example ./codeSnippetForbashrc`
+   - `chmod 600 ./codeSnippetForbashrc`
+2. Source it from `~/.bashrc`:
+   - `echo 'test -f ~/projects/volunteerflow/codeSnippetForbashrc && . ~/projects/volunteerflow/codeSnippetForbashrc' >> ~/.bashrc`
+
+Notes:
+- `codeSnippetForbashrc` is ignored by git to avoid committing secrets.
+- This snippet reads only `ADMIN_TOKEN` from `.env.staging` (it does not export DB credentials).
+
 ### Application log file
 Local dev compose writes application logs to `/app/logs/app.log` inside the app container (bind-mounted to `./logs/app.log` on the host).
 
