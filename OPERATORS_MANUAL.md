@@ -187,6 +187,12 @@ Notes:
 - `GET /healthz`: basic “process is up” check (public).
 - `GET /ops/health`: checks DB connectivity (requires header `x-admin-token: $ADMIN_TOKEN`).
 
+### Staging smoke test
+Run a quick end-to-end check after deploys:
+
+- `BASE_URL=https://www.trtechapp.com ADMIN_TOKEN=... sh scripts/smoke.sh`
+- Optional email send: `EMAIL_TO=you@domain.com BASE_URL=... ADMIN_TOKEN=... sh scripts/smoke.sh`
+
 ### Admin token in shell (ops convenience)
 For operators who have access to the server repo folder, it can be convenient to have `ADMIN_TOKEN` in their shell environment for ops endpoints.
 
