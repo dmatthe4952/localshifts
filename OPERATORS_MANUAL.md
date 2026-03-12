@@ -261,6 +261,13 @@ Sendmail/postfix (host relay):
 - If your staging server has a local MTA (sendmail/postfix), configure it to accept SMTP on `127.0.0.1` (commonly port `25`).
 - Then set `SMTP_HOST=host.docker.internal`, `SMTP_PORT=25`, `SMTP_SECURE=false` in `.env.staging` and recreate the app container.
 
+When to switch to an SMTP relay (smarthost):
+- If you see repeated provider errors like `Service unavailable`, connection throttling, or long-lived deferrals in `mailq`, your droplet IP reputation is likely the issue.
+- If outbound port `25` is blocked by your provider/network, direct delivery will fail.
+- In those cases, configure a relay provider (SES/SendGrid/Mailgun/etc.) and either:
+  - point VolunteerFlow directly at the provider via `SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS`, or
+  - configure sendmail to use a `SMART_HOST` and keep VolunteerFlow relaying to localhost.
+
 ### Managed Postgres + SSL (DigitalOcean, etc.)
 If you use a managed database and see TLS errors like `SELF_SIGNED_CERT_IN_CHAIN`, use one of these approaches:
 

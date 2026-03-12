@@ -12,9 +12,11 @@ This is an optional way to ensure the VolunteerFlow Docker Compose stack starts 
    - `sudo systemctl daemon-reload`
    - `sudo systemctl enable --now volunteerflow`
 
+Notes:
+- Some servers won’t have a `docker.service` unit name (snap installs, custom setups). The unit waits for `docker info` to succeed instead of depending on a specific service name.
+
 ## Operate
 
 - Status: `sudo systemctl status volunteerflow`
 - Logs: `sudo journalctl -u volunteerflow -f`
 - Restart: `sudo systemctl restart volunteerflow`
-
