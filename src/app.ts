@@ -567,6 +567,175 @@ export async function buildApp(params: {
     });
   });
 
+  app.get('/admin/events', async (req, reply) => {
+    requireRole(req, 'super_admin');
+    const qs = req.query as Record<string, string | undefined>;
+    const ok = typeof qs.ok === 'string' ? qs.ok : undefined;
+    const error = typeof qs.err === 'string' ? qs.err : undefined;
+
+    const rows = await params.db
+      .selectFrom('events')
+      .innerJoin('organizations', 'organizations.id', 'events.organization_id')
+      .innerJoin('users', 'users.id', 'events.manager_id')
+      .select([
+        'events.id',
+        'events.slug',
+        'events.title',
+        'events.start_date',
+        'events.end_date',
+        'events.is_published',
+        'events.is_archived',
+        'events.cancelled_at',
+        'events.created_at',
+        'organizations.name as organization_name',
+        'users.email as manager_email'
+      ])
+      .orderBy('events.created_at', 'desc')
+      .execute();
+
+    const eligible = rows.filter((r: any) => r.is_archived && !r.is_published);
+    const others = rows.filter((r: any) => !(r.is_archived && !r.is_published));
+
+    const mapRow = (r: any) => {
+      const start = toDateOnly(r.start_date);
+      const end = toDateOnly(r.end_date);
+      return {
+        id: r.id,
+        title: r.title,
+        slug: r.slug,
+        organizationName: r.organization_name,
+        managerEmail: r.manager_email,
+        dateRange: start && end && start !== end ? `${start} – ${end}` : start || end,
+        isPublished: r.is_published,
+        isArchived: r.is_archived,
+        cancelledAt: r.cancelled_at,
+        createdAt: toIso(r.created_at),
+        publicUrl: `/events/${encodeURIComponent(r.slug ?? r.id)}`
+      };
+    };
+
+    return render(reply, 'admin_events.njk', {
+      ok,
+      error,
+      eligibleEvents: eligible.map(mapRow),
+      otherEvents: others.map(mapRow)
+    });
+  });
+
+  app.get('/admin/events/:id/delete', async (req, reply) => {
+    requireRole(req, 'super_admin');
+    const { id } = req.params as { id: string };
+    const qs = req.query as Record<string, string | undefined>;
+    const error = typeof qs.err === 'string' ? qs.err : undefined;
+
+    const event = await params.db
+      .selectFrom('events')
+      .innerJoin('organizations', 'organizations.id', 'events.organization_id')
+      .innerJoin('users', 'users.id', 'events.manager_id')
+      .select([
+        'events.id',
+        'events.slug',
+        'events.title',
+        'events.start_date',
+        'events.end_date',
+        'events.is_published',
+        'events.is_archived',
+        'events.cancelled_at',
+        'events.created_at',
+        'organizations.name as organization_name',
+        'users.email as manager_email'
+      ])
+      .where('events.id', '=', id)
+      .executeTakeFirst();
+    if (!event) return reply.code(404).view('not_found.njk', { message: 'Event not found.' });
+
+    const shifts = await params.db
+      .selectFrom('shifts')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('event_id', '=', id)
+      .executeTakeFirst();
+
+    const signups = await params.db
+      .selectFrom('signups')
+      .innerJoin('shifts', 'shifts.id', 'signups.shift_id')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('shifts.event_id', '=', id)
+      .executeTakeFirst();
+
+    const notifications = await params.db
+      .selectFrom('notification_sends')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('event_id', '=', id)
+      .executeTakeFirst();
+
+    const eligible = Boolean(event.is_archived) && !event.is_published;
+    const requiredConfirmText = `DELETE ${event.id}`;
+
+    const start = toDateOnly(event.start_date);
+    const end = toDateOnly(event.end_date);
+
+    return render(reply, 'admin_event_delete.njk', {
+      error,
+      eligible,
+      requiredConfirmText,
+      impact: {
+        shifts: Number(shifts?.c ?? 0),
+        signups: Number(signups?.c ?? 0),
+        notifications: Number(notifications?.c ?? 0)
+      },
+      event: {
+        id: event.id,
+        title: event.title,
+        slug: event.slug,
+        organizationName: event.organization_name,
+        managerEmail: event.manager_email,
+        dateRange: start && end && start !== end ? `${start} – ${end}` : start || end,
+        isPublished: event.is_published,
+        isArchived: event.is_archived,
+        cancelledAt: event.cancelled_at,
+        createdAt: toIso(event.created_at),
+        publicUrl: `/events/${encodeURIComponent(event.slug ?? event.id)}`
+      }
+    });
+  });
+
+  app.post('/admin/events/:id/delete', async (req, reply) => {
+    requireRole(req, 'super_admin');
+    const { id } = req.params as { id: string };
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const confirmText = String(body.confirmText ?? '').trim();
+    const acknowledge = String(body.acknowledge ?? '').trim();
+
+    const event = await params.db
+      .selectFrom('events')
+      .select(['id', 'title', 'slug', 'is_published', 'is_archived'])
+      .where('id', '=', id)
+      .executeTakeFirst();
+    if (!event) return reply.code(404).view('not_found.njk', { message: 'Event not found.' });
+
+    const requiredConfirmText = `DELETE ${event.id}`;
+    try {
+      if (confirmText !== requiredConfirmText) throw new Error('Confirmation text does not match.');
+      if (acknowledge !== 'yes') throw new Error('Acknowledgement is required.');
+      if (!event.is_archived || event.is_published) throw new Error('Only archived and unpublished events can be deleted.');
+
+      // Hard delete (cascades to shifts/signups/etc).
+      const deleted = await params.db
+        .deleteFrom('events')
+        .where('id', '=', id)
+        .where('is_archived', '=', true)
+        .where('is_published', '=', false)
+        .executeTakeFirst();
+
+      if (Number((deleted as any)?.numDeletedRows ?? 0) === 0) throw new Error('Event not eligible for deletion.');
+
+      app.log.warn({ eventId: event.id, title: event.title, slug: event.slug }, 'admin hard-deleted event');
+      return reply.code(303).redirect(`/admin/events?ok=${encodeURIComponent('Event deleted.')}`);
+    } catch (err: any) {
+      return reply.code(303).redirect(`/admin/events/${id}/delete?err=${encodeURIComponent(String(err?.message ?? err))}`);
+    }
+  });
+
   app.get('/admin/users', async (req, reply) => {
     requireRole(req, 'super_admin');
     const users = await params.db

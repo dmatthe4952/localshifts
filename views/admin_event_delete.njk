@@ -1,0 +1,65 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Delete Event</h1>
+  <div class="crumbs">
+    <a href="/admin/dashboard">Admin</a>
+    <span class="sep">/</span>
+    <a href="/admin/events">Events</a>
+    <span class="sep">/</span>
+    <span>Delete</span>
+  </div>
+
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+
+  <div class="panel">
+    <div class="title">{{ event.title }}</div>
+    <div class="meta">{{ event.organizationName }} • {{ event.dateRange }}</div>
+    <div class="muted" style="margin-top:8px">
+      {% if event.isPublished %}Published{% else %}Unpublished{% endif %}
+      {% if event.isArchived %} • Archived{% endif %}
+      {% if event.cancelledAt %} • Cancelled{% endif %}
+    </div>
+    <div class="muted" style="margin-top:6px">Manager: {{ event.managerEmail }}</div>
+    <div class="muted" style="margin-top:6px">Event ID: <code>{{ event.id }}</code></div>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <div class="title">Impact</div>
+    <div class="muted" style="margin-top:8px">
+      Shifts: {{ impact.shifts }} • Signups: {{ impact.signups }} • Notifications: {{ impact.notifications }}
+    </div>
+  </div>
+
+  {% if not eligible %}
+    <div class="panel" style="margin-top:14px; border-left: 4px solid #c2410c;">
+      <div class="title">Not eligible</div>
+      <p class="muted" style="margin-top:8px">Only archived and unpublished events can be deleted.</p>
+      <div class="actions" style="margin-top:12px">
+        <a class="btn" href="/admin/events">Back</a>
+      </div>
+    </div>
+  {% else %}
+    <div class="panel" style="margin-top:14px; border-left: 4px solid #b91c1c;">
+      <div class="title">Danger zone</div>
+      <p class="muted" style="margin-top:8px">This permanently deletes the event and related records. This cannot be undone.</p>
+
+      <form class="form" method="post" action="/admin/events/{{ event.id }}/delete" style="margin-top:12px">
+        <label>
+          <span>Type to confirm</span>
+          <input name="confirmText" required autocomplete="off" placeholder="{{ requiredConfirmText }}" />
+        </label>
+        <label style="display:flex; gap:10px; align-items:center; margin-top:8px">
+          <input type="checkbox" name="acknowledge" value="yes" required />
+          <span>I understand this is permanent.</span>
+        </label>
+        <div class="actions" style="margin-top:12px">
+          <button class="btn danger" type="submit">Delete permanently</button>
+          <a class="btn" href="/admin/events">Cancel</a>
+        </div>
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}
+

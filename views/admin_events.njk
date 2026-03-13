@@ -1,0 +1,63 @@
+{% extends "layout.njk" %}
+{% block content %}
+  <h1>Events</h1>
+  <div class="crumbs">
+    <a href="/admin/dashboard">Admin</a>
+    <span class="sep">/</span>
+    <span>Events</span>
+  </div>
+
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+  {% if ok %}
+    <div class="flash ok"><div>{{ ok }}</div></div>
+  {% endif %}
+
+  <h2 style="margin-top:18px">Eligible for Deletion (Archived + Unpublished)</h2>
+  <div class="panel">
+    <p class="muted">Hard delete is permanent and removes related shifts/signups via database cascades.</p>
+  </div>
+
+  {% if eligibleEvents.length == 0 %}
+    <div class="panel" style="margin-top:14px"><p class="muted">No eligible events.</p></div>
+  {% else %}
+    <div class="stack" style="margin-top:14px">
+      {% for e in eligibleEvents %}
+        <div class="panel">
+          <div class="title"><a href="{{ e.publicUrl }}">{{ e.title }}</a></div>
+          <div class="meta">{{ e.organizationName }} • {{ e.dateRange }}</div>
+          <div class="muted" style="margin-top:8px">
+            Archived • Unpublished
+            {% if e.cancelledAt %} • Cancelled{% endif %}
+          </div>
+          <div class="muted" style="margin-top:6px">Manager: {{ e.managerEmail }}</div>
+          <div class="actions" style="margin-top:12px">
+            <a class="btn danger" href="/admin/events/{{ e.id }}/delete">Delete…</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <h2 style="margin-top:18px">All Other Events</h2>
+  {% if otherEvents.length == 0 %}
+    <div class="panel" style="margin-top:14px"><p class="muted">No events.</p></div>
+  {% else %}
+    <div class="stack" style="margin-top:14px">
+      {% for e in otherEvents %}
+        <div class="panel">
+          <div class="title"><a href="{{ e.publicUrl }}">{{ e.title }}</a></div>
+          <div class="meta">{{ e.organizationName }} • {{ e.dateRange }}</div>
+          <div class="muted" style="margin-top:8px">
+            {% if e.isPublished %}Published{% else %}Unpublished{% endif %}
+            {% if e.isArchived %} • Archived{% endif %}
+            {% if e.cancelledAt %} • Cancelled{% endif %}
+          </div>
+          <div class="muted" style="margin-top:6px">Manager: {{ e.managerEmail }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}
+
