@@ -52,7 +52,7 @@ async function sendAndRecord(params: {
   }
 }
 
-export async function sendSignupConfirmation(db: Kysely<DB>, signupId: string) {
+export async function sendSignupConfirmationWithKind(db: Kysely<DB>, signupId: string, kind: string) {
   const row = await db
     .selectFrom('signups')
     .innerJoin('shifts', 'shifts.id', 'signups.shift_id')
@@ -100,13 +100,17 @@ export async function sendSignupConfirmation(db: Kysely<DB>, signupId: string) {
 
   await sendAndRecord({
     db,
-    kind: 'signup_confirmation',
+    kind,
     eventId: row.event_id,
     signupId: row.signup_id,
     toEmail: row.email,
     subject,
     body
   });
+}
+
+export async function sendSignupConfirmation(db: Kysely<DB>, signupId: string) {
+  return sendSignupConfirmationWithKind(db, signupId, 'signup_confirmation');
 }
 
 export async function sendCancellationEmails(db: Kysely<DB>, signupId: string, cancelledAt: string) {
@@ -232,4 +236,3 @@ export async function sendManagerRemovalNotice(db: Kysely<DB>, signupId: string)
     ].join('\n')
   });
 }
-

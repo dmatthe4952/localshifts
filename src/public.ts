@@ -303,6 +303,7 @@ export async function createSignup(params: {
         'events.cancelled_at'
       ])
       .where('shifts.id', '=', params.shiftId)
+      .forUpdate()
       .executeTakeFirst();
 
     if (!shift || !shift.is_active) throw new Error('That shift is no longer available.');

@@ -52,7 +52,9 @@
         </label>
         <label style="display:flex; gap:10px; align-items:center; margin-top:8px">
           <input type="checkbox" name="acknowledge" value="yes" required />
-          <span>I understand this is permanent.</span>
+          <span>
+            I understand this is permanent. Confirm with <code>{{ requiredConfirmText }}</code>.
+          </span>
         </label>
         <div class="actions" style="margin-top:12px">
           <button class="btn danger" type="submit">Delete permanently</button>
@@ -62,4 +64,3 @@
     </div>
   {% endif %}
 {% endblock %}
-

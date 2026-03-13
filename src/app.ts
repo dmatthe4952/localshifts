@@ -35,7 +35,8 @@ import {
 import {
   sendCancellationEmails,
   sendManagerRemovalNotice,
-  sendSignupConfirmation
+  sendSignupConfirmation,
+  sendSignupConfirmationWithKind
 } from './notifications.js';
 
 function isValidEmail(email: string): boolean {
@@ -270,9 +271,13 @@ export async function buildApp(params: {
 
     const qs = req.query as Record<string, string | undefined>;
     const flash =
-      qs.ok === 'signup' ? { type: 'ok', message: 'You’re signed up!' } : qs.err ? { type: 'err', message: qs.err } : null;
+      qs.ok === 'signup'
+        ? { type: 'ok', message: 'You’re signed up!', shiftId: typeof qs.shift === 'string' ? qs.shift : undefined }
+        : qs.err
+          ? { type: 'err', message: qs.err, shiftId: typeof qs.shift === 'string' ? qs.shift : undefined }
+          : null;
 
-    return render(reply, 'event.njk', { event, flash });
+    return render(reply, 'event.njk', { event, flash, viewerEmail });
   });
 
   app.post('/events/:slugOrId/shifts/:shiftId/signup', async (req, reply) => {
@@ -316,8 +321,16 @@ export async function buildApp(params: {
       }
       return reply.code(303).redirect(`/events/${encodeURIComponent(slugOrId)}?ok=signup#shift-${shiftId}`);
     } catch (err: any) {
-      const msg = err?.message ? String(err.message) : 'Unable to sign you up for that shift.';
-      return reply.code(303).redirect(`/events/${encodeURIComponent(slugOrId)}?err=${encodeURIComponent(msg)}#shift-${shiftId}`);
+      const rawMsg = err?.message ? String(err.message) : 'Unable to sign you up for that shift.';
+      const msg =
+        rawMsg === 'Sorry — this shift is full.'
+          ? 'That shift just filled up. Please choose another shift.'
+          : rawMsg;
+      return reply
+        .code(303)
+        .redirect(
+          `/events/${encodeURIComponent(slugOrId)}?err=${encodeURIComponent(msg)}&shift=${encodeURIComponent(shiftId)}#shift-${shiftId}`
+        );
     }
   });
 
@@ -1928,6 +1941,38 @@ export async function buildApp(params: {
 
     const redirectEventId = eventId || row.event_id;
     return reply.code(303).redirect(`/manager/events/${redirectEventId}/signups?ok=${encodeURIComponent('Signup removed.')}`);
+  });
+
+  app.post('/manager/signups/:signupId/resend', async (req, reply) => {
+    const currentUser = requireRole(req, 'event_manager');
+    const { signupId } = req.params as { signupId: string };
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const eventId = String(body.eventId ?? '').trim();
+
+    const row = await params.db
+      .selectFrom('signups')
+      .innerJoin('shifts', 'shifts.id', 'signups.shift_id')
+      .innerJoin('events', 'events.id', 'shifts.event_id')
+      .select(['signups.id as signup_id', 'signups.status', 'events.id as event_id'])
+      .where('signups.id', '=', signupId)
+      .where('events.manager_id', '=', currentUser.id)
+      .executeTakeFirst();
+    if (!row) return reply.code(404).view('not_found.njk', { message: 'Signup not found.' });
+    if (row.status !== 'active') {
+      const redirectEventId = eventId || row.event_id;
+      return reply.code(303).redirect(`/manager/events/${redirectEventId}/signups?err=${encodeURIComponent('Signup is not active.')}`);
+    }
+
+    try {
+      await sendSignupConfirmationWithKind(params.db, signupId, `signup_confirmation_manual_${Date.now()}`);
+      const redirectEventId = eventId || row.event_id;
+      return reply.code(303).redirect(`/manager/events/${redirectEventId}/signups?ok=${encodeURIComponent('Confirmation email queued.')}`);
+    } catch (err: any) {
+      const redirectEventId = eventId || row.event_id;
+      return reply
+        .code(303)
+        .redirect(`/manager/events/${redirectEventId}/signups?err=${encodeURIComponent(String(err?.message ?? err))}`);
+    }
   });
 
   app.post('/ops/events/:slugOrId/cancel', async (req, reply) => {

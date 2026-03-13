@@ -10,7 +10,12 @@ function formEncode(values: Record<string, string>) {
     .join('&');
 }
 
-describe.skipIf(!DATABASE_URL)('manager roster', () => {
+function parseLocation(location: string) {
+  const url = new URL(location, 'http://localhost');
+  return { path: url.pathname, hash: url.hash, ok: url.searchParams.get('ok'), err: url.searchParams.get('err'), shift: url.searchParams.get('shift') };
+}
+
+describe.skipIf(!DATABASE_URL)('public concurrency', () => {
   let createDb: any;
   let buildApp: any;
   let runMigrations: any;
@@ -34,15 +39,14 @@ describe.skipIf(!DATABASE_URL)('manager roster', () => {
 
   let db: any;
   let app: any;
-  let mgrCookie: string;
-  let eventId: string;
-  let shiftId: string;
 
   beforeEach(async () => {
     db = createDb();
     await resetDb(db);
     app = await buildApp({ db, runMigrations: false, logger: false });
+  });
 
+  test('two concurrent signups for last slot: one succeeds, one sees friendly full message', async () => {
     await app.inject({
       method: 'POST',
       url: '/admin/setup',
@@ -80,23 +84,25 @@ describe.skipIf(!DATABASE_URL)('manager roster', () => {
       payload: formEncode({ email: 'manager@example.com', password: 'correct-horse-battery-staple' })
     });
     const mgrCookieHeader = mgrLogin.headers['set-cookie'];
-    mgrCookie = (Array.isArray(mgrCookieHeader) ? mgrCookieHeader[0] : String(mgrCookieHeader ?? '')).split(';')[0];
+    const mgrCookie = (Array.isArray(mgrCookieHeader) ? mgrCookieHeader[0] : String(mgrCookieHeader ?? '')).split(';')[0];
 
     const org = await db.selectFrom('organizations').select(['id']).where('slug', '=', 'test-org').executeTakeFirstOrThrow();
+
     const eventRes = await app.inject({
       method: 'POST',
       url: '/manager/events/new',
       headers: { cookie: mgrCookie, 'content-type': 'application/x-www-form-urlencoded' },
       payload: formEncode({
-        title: 'My Test Event',
+        title: 'Concurrency Event',
         organizationId: org.id,
         date: '2026-04-01',
-        description: 'Hello',
-        locationName: 'Somewhere',
-        locationMapUrl: 'https://maps.example.com'
+        description: '',
+        locationName: '',
+        locationMapUrl: ''
       })
     });
-    eventId = String(eventRes.headers.location).split('/')[3];
+    expect(eventRes.statusCode).toBe(303);
+    const eventId = String(eventRes.headers.location).split('/')[3];
 
     const shiftRes = await app.inject({
       method: 'POST',
@@ -109,63 +115,56 @@ describe.skipIf(!DATABASE_URL)('manager roster', () => {
         startTime: '10:00',
         durationMinutes: '60',
         minVolunteers: '0',
-        maxVolunteers: '2'
+        maxVolunteers: '1'
       })
     });
     expect(shiftRes.statusCode).toBe(303);
-    const shift = await db.selectFrom('shifts').select(['id']).where('event_id', '=', eventId).executeTakeFirstOrThrow();
-    shiftId = shift.id;
-  });
 
-  test('manager roster shows signups and can remove', async () => {
-    // Add manual signup
-    const addRes = await app.inject({
-      method: 'POST',
-      url: `/manager/events/${eventId}/signups/add`,
-      headers: { cookie: mgrCookie, 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ shiftId, firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' })
-    });
-    expect(addRes.statusCode).toBe(303);
+    const pubRes = await app.inject({ method: 'POST', url: `/manager/events/${eventId}/publish`, headers: { cookie: mgrCookie } });
+    expect(pubRes.statusCode).toBe(303);
 
-    const roster = await app.inject({ method: 'GET', url: `/manager/events/${eventId}/signups`, headers: { cookie: mgrCookie } });
-    expect(roster.statusCode).toBe(200);
-    expect(roster.body).toContain('Ada Lovelace');
+    const eventRow = await db.selectFrom('events').select(['slug']).where('id', '=', eventId).executeTakeFirstOrThrow();
+    const slugOrId = eventRow.slug ?? eventId;
+    const shiftRow = await db.selectFrom('shifts').select(['id']).where('event_id', '=', eventId).executeTakeFirstOrThrow();
 
-    const signup = await db.selectFrom('signups').select(['id', 'status']).where('shift_id', '=', shiftId).executeTakeFirstOrThrow();
-    expect(signup.status).toBe('active');
+    const signupUrl = `/events/${encodeURIComponent(slugOrId)}/shifts/${encodeURIComponent(shiftRow.id)}/signup`;
 
-    const resendRes = await app.inject({
-      method: 'POST',
-      url: `/manager/signups/${signup.id}/resend`,
-      headers: { cookie: mgrCookie, 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ eventId })
-    });
-    expect(resendRes.statusCode).toBe(303);
+    const [a, b] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: signupUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: formEncode({ firstName: 'Alice', lastName: 'One', email: 'alice@example.com' })
+      }),
+      app.inject({
+        method: 'POST',
+        url: signupUrl,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: formEncode({ firstName: 'Bob', lastName: 'Two', email: 'bob@example.com' })
+      })
+    ]);
 
-    const resendSend = await db
-      .selectFrom('notification_sends')
-      .select(['kind'])
-      .where('signup_id', '=', signup.id)
-      .orderBy('created_at', 'desc')
-      .executeTakeFirst();
-    expect(String(resendSend?.kind ?? '')).toContain('signup_confirmation_manual_');
+    expect(a.statusCode).toBe(303);
+    expect(b.statusCode).toBe(303);
 
-    const cancelRes = await app.inject({
-      method: 'POST',
-      url: `/manager/signups/${signup.id}/cancel`,
-      headers: { cookie: mgrCookie, 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ eventId })
-    });
-    expect(cancelRes.statusCode).toBe(303);
+    const locA = parseLocation(String(a.headers.location));
+    const locB = parseLocation(String(b.headers.location));
 
-    const signup2 = await db.selectFrom('signups').select(['status']).where('id', '=', signup.id).executeTakeFirstOrThrow();
-    expect(signup2.status).toBe('cancelled');
+    const okCount = [locA, locB].filter((l) => l.ok === 'signup').length;
+    expect(okCount).toBe(1);
 
-    const sends = await db
-      .selectFrom('notification_sends')
+    const errLoc = [locA, locB].find((l) => l.err);
+    expect(errLoc?.err).toBe('That shift just filled up. Please choose another shift.');
+    expect(errLoc?.shift).toBe(shiftRow.id);
+    expect(errLoc?.hash).toBe(`#shift-${shiftRow.id}`);
+
+    const activeCount = await db
+      .selectFrom('signups')
       .select((eb: any) => eb.fn.countAll<number>().as('c'))
-      .where('kind', '=', 'manager_removal_notice')
+      .where('shift_id', '=', shiftRow.id)
+      .where('status', '=', 'active')
       .executeTakeFirst();
-    expect(Number(sends?.c ?? 0)).toBe(1);
+    expect(Number(activeCount?.c ?? 0)).toBe(1);
   });
 });
+

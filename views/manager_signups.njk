@@ -90,10 +90,16 @@
                   </div>
                   <div style="text-align:right">
                     {% if s.status == 'active' %}
-                      <form method="post" action="/manager/signups/{{ s.id }}/cancel">
-                        <input type="hidden" name="eventId" value="{{ event.id }}" />
-                        <button class="btn danger" type="submit">Remove</button>
-                      </form>
+                      <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap">
+                        <form method="post" action="/manager/signups/{{ s.id }}/resend">
+                          <input type="hidden" name="eventId" value="{{ event.id }}" />
+                          <button class="btn" type="submit">Resend Email</button>
+                        </form>
+                        <form method="post" action="/manager/signups/{{ s.id }}/cancel">
+                          <input type="hidden" name="eventId" value="{{ event.id }}" />
+                          <button class="btn danger" type="submit">Remove</button>
+                        </form>
+                      </div>
                     {% endif %}
                   </div>
                 </div>
@@ -105,4 +111,3 @@
     </div>
   {% endif %}
 {% endblock %}
-

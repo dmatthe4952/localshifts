@@ -52,8 +52,8 @@ Ops (temporary, until admin/manager UI exists):
 
 Testing:
 
-- Run integration tests with Docker: `docker compose -f docker-compose.test.yml up --build --abort-on-container-exit`
-- If you previously ran the test stack with a persistent Postgres volume, run `docker compose -f docker-compose.test.yml down -v` once to clear stale data.
+- Run integration tests with Docker: `npm run test:db`
+- Cleanup test containers/volumes: `npm run test:db:clean`
 
 Postgres is not exposed on a host port by default; to connect from your machine, use:
 

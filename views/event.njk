@@ -46,7 +46,12 @@
   {% else %}
     <div class="stack">
       {% for shift in event.shifts %}
-        <div class="panel" id="shift-{{ shift.id }}">
+        <div class="panel {% if flash and flash.type == 'err' and flash.shiftId and flash.shiftId == shift.id %}attn{% endif %}" id="shift-{{ shift.id }}">
+          {% if flash and flash.type == 'err' and flash.shiftId and flash.shiftId == shift.id %}
+            <div class="flash err" style="margin:0 0 12px">
+              <div>{{ flash.message }}</div>
+            </div>
+          {% endif %}
           <div class="shift-top">
             <div>
               <div class="title">{{ shift.roleName }}</div>
@@ -86,16 +91,16 @@
                   <div class="grid2">
                     <label>
                       <span>First name</span>
-                      <input name="firstName" autocomplete="given-name" required />
+                      <input name="firstName" autocomplete="given-name" required data-vf="firstName" />
                     </label>
                     <label>
                       <span>Last name</span>
-                      <input name="lastName" autocomplete="family-name" required />
+                      <input name="lastName" autocomplete="family-name" required data-vf="lastName" />
                     </label>
                   </div>
                   <label>
                     <span>Email</span>
-                    <input name="email" type="email" autocomplete="email" required />
+                    <input name="email" type="email" autocomplete="email" required data-vf="email" value="{{ viewerEmail or '' }}" />
                   </label>
                   <div class="actions">
                     <button class="btn primary" type="submit">Confirm Signup</button>
@@ -108,4 +113,38 @@
       {% endfor %}
     </div>
   {% endif %}
+
+  <script>
+    (function () {
+      try {
+        var panels = document.querySelectorAll('[id^="shift-"]');
+        panels.forEach(function (panel) {
+          var form = panel.querySelector('form.form');
+          if (!form) return;
+          var first = form.querySelector('input[data-vf="firstName"]');
+          var last = form.querySelector('input[data-vf="lastName"]');
+          var email = form.querySelector('input[data-vf="email"]');
+
+          if (first && !first.value) first.value = localStorage.getItem('vf_firstName') || '';
+          if (last && !last.value) last.value = localStorage.getItem('vf_lastName') || '';
+          if (email && !email.value) email.value = localStorage.getItem('vf_email') || '';
+
+          if (first) first.addEventListener('input', function () { localStorage.setItem('vf_firstName', first.value); });
+          if (last) last.addEventListener('input', function () { localStorage.setItem('vf_lastName', last.value); });
+          if (email) email.addEventListener('input', function () { localStorage.setItem('vf_email', email.value); });
+        });
+
+        var flashShiftId = {{ flash and flash.shiftId ? ('"' ~ flash.shiftId ~ '"') : 'null' }};
+        if (flashShiftId) {
+          var panel = document.getElementById('shift-' + flashShiftId);
+          if (panel) {
+            var details = panel.querySelector('details');
+            if (details) details.open = true;
+            var focusInput = panel.querySelector('input[name="firstName"], input[name="email"]');
+            if (focusInput && typeof focusInput.focus === 'function') focusInput.focus();
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
 {% endblock %}

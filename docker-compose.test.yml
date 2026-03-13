@@ -18,7 +18,7 @@ services:
   test:
     image: node:20-alpine
     working_dir: /app
-    command: sh -lc "npm install --no-package-lock && npm run migrate && npm test"
+    command: sh -lc "npm ci && npm test"
     environment:
       APP_ENV: test
       APP_PORT: 3000
