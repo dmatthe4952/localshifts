@@ -602,15 +602,121 @@ export async function buildApp(params: {
       .where('manager_id', '=', currentUser.id)
       .orderBy('start_date', 'desc')
       .execute();
-    const mapped = events.map((e) => ({
-      id: e.id,
-      title: e.title,
-      dateRange: e.start_date === e.end_date ? e.start_date : `${e.start_date} – ${e.end_date}`,
-      publicUrl: `/events/${encodeURIComponent(e.slug ?? e.id)}`,
-      isPublished: e.is_published,
-      cancelledAt: e.cancelled_at
-    }));
-    return render(reply, 'manager_dashboard.njk', { currentUser, events: mapped });
+
+    const ids = events.map((e) => e.id);
+    const statsRows =
+      ids.length === 0
+        ? []
+        : await params.db
+            .selectFrom('shifts')
+            .innerJoin('events', 'events.id', 'shifts.event_id')
+            .leftJoin('signups', (join) =>
+              join.onRef('signups.shift_id', '=', 'shifts.id').on('signups.status', '=', sql.lit('active'))
+            )
+            .select([
+              'shifts.event_id as event_id',
+              sql<number>`count(distinct shifts.id)`.as('shift_count'),
+              sql<number>`coalesce(count(signups.id), 0)`.as('filled'),
+              sql<number>`coalesce(sum(shifts.max_volunteers), 0)`.as('capacity')
+            ])
+            .where('events.manager_id', '=', currentUser.id)
+            .where('shifts.is_active', '=', true)
+            .where('shifts.event_id', 'in', ids)
+            .groupBy('shifts.event_id')
+            .execute();
+
+    const statsByEvent = new Map(
+      statsRows.map((r: any) => [
+        r.event_id,
+        {
+          shiftCount: Number(r.shift_count ?? 0),
+          filled: Number(r.filled ?? 0),
+          capacity: Number(r.capacity ?? 0)
+        }
+      ])
+    );
+
+    const mapped = events.map((e) => {
+      const stats = statsByEvent.get(e.id) ?? { shiftCount: 0, filled: 0, capacity: 0 };
+      return {
+        id: e.id,
+        title: e.title,
+        dateRange: e.start_date === e.end_date ? e.start_date : `${e.start_date} – ${e.end_date}`,
+        publicUrl: `/events/${encodeURIComponent(e.slug ?? e.id)}`,
+        isPublished: e.is_published,
+        cancelledAt: e.cancelled_at,
+        stats: {
+          shifts: stats.shiftCount,
+          filled: stats.filled,
+          open: Math.max(0, stats.capacity - stats.filled)
+        }
+      };
+    });
+
+    const upcoming = await params.db
+      .selectFrom('shifts')
+      .innerJoin('events', 'events.id', 'shifts.event_id')
+      .leftJoin('signups', (join) =>
+        join.onRef('signups.shift_id', '=', 'shifts.id').on('signups.status', '=', sql.lit('active'))
+      )
+      .select([
+        'shifts.id as shift_id',
+        'shifts.role_name',
+        'shifts.shift_date',
+        'shifts.start_time',
+        'shifts.end_time',
+        'shifts.min_volunteers',
+        'shifts.max_volunteers',
+        'events.id as event_id',
+        'events.title as event_title',
+        sql<number>`coalesce(count(signups.id), 0)`.as('filled')
+      ])
+      .where('events.manager_id', '=', currentUser.id)
+      .where('events.is_archived', '=', false)
+      .where('shifts.is_active', '=', true)
+      .where(sql<boolean>`shifts.shift_date >= current_date and shifts.shift_date < current_date + interval '14 days'`)
+      .groupBy([
+        'shifts.id',
+        'events.id',
+        'events.title',
+        'shifts.role_name',
+        'shifts.shift_date',
+        'shifts.start_time',
+        'shifts.end_time',
+        'shifts.min_volunteers',
+        'shifts.max_volunteers'
+      ])
+      .orderBy('shifts.shift_date', 'asc')
+      .orderBy('shifts.start_time', 'asc')
+      .execute();
+
+    const upcomingMapped = upcoming.map((s: any) => {
+      const filled = Number(s.filled ?? 0);
+      const min = Number(s.min_volunteers ?? 0);
+      const max = Number(s.max_volunteers ?? 0);
+      return {
+        shiftId: s.shift_id,
+        eventId: s.event_id,
+        eventTitle: s.event_title,
+        roleName: s.role_name,
+        date: String(s.shift_date),
+        timeRange: `${String(s.start_time)}–${String(s.end_time)}`,
+        filled,
+        max,
+        open: Math.max(0, max - filled),
+        isUnderstaffed: filled < min,
+        rosterUrl: `/manager/events/${encodeURIComponent(s.event_id)}/signups`
+      };
+    });
+
+    const understaffedCount = upcomingMapped.filter((s: any) => s.isUnderstaffed).length;
+
+    return render(reply, 'manager_dashboard.njk', {
+      currentUser,
+      events: mapped,
+      upcomingShifts: upcomingMapped,
+      understaffedCount
+    });
   });
 
   // Admin organizations (needed before managers can create events)

@@ -5,8 +5,40 @@
     <div class="meta">Signed in as {{ currentUser.displayName }}</div>
     <div class="actions" style="margin-top:12px">
       <a class="btn primary" href="/manager/events">Manage Events</a>
+      <a class="btn" href="/manager/events/new">Create Event</a>
     </div>
   </div>
+
+  {% if understaffedCount and understaffedCount > 0 %}
+    <div class="panel" style="border-left: 4px solid #c2410c;">
+      <div class="title">Understaffed shifts</div>
+      <div class="meta">{{ understaffedCount }} shift(s) in the next 14 days are below their minimum volunteer goal.</div>
+      <div class="actions" style="margin-top:12px">
+        <a class="btn" href="#upcoming">View upcoming shifts</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <h2 id="upcoming" style="margin-top:18px">Upcoming Shifts (Next 14 Days)</h2>
+  {% if upcomingShifts and upcomingShifts.length > 0 %}
+    <div class="stack">
+      {% for s in upcomingShifts %}
+        <div class="panel">
+          <div class="title">{{ s.eventTitle }} — {{ s.roleName }}</div>
+          <div class="meta">{{ s.date }} • {{ s.timeRange }}</div>
+          <div class="muted" style="margin-top:8px">
+            Filled: {{ s.filled }} / {{ s.max }} • Open: {{ s.open }}
+            {% if s.isUnderstaffed %} • <strong style="color:#c2410c;">Understaffed</strong>{% endif %}
+          </div>
+          <div class="actions" style="margin-top:12px">
+            <a class="btn" href="{{ s.rosterUrl }}">Roster</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="panel"><p class="muted">No upcoming shifts in the next 14 days.</p></div>
+  {% endif %}
 
   <h2 style="margin-top:18px">My Events</h2>
   {% if events.length == 0 %}
@@ -21,6 +53,11 @@
             {% if e.isPublished %}Published{% else %}Draft{% endif %}
             {% if e.cancelledAt %} • Cancelled{% endif %}
           </div>
+          {% if e.stats %}
+            <div class="muted" style="margin-top:8px">
+              Shifts: {{ e.stats.shifts }} • Filled: {{ e.stats.filled }} • Open: {{ e.stats.open }}
+            </div>
+          {% endif %}
         </div>
       {% endfor %}
     </div>
