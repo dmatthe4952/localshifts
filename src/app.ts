@@ -189,6 +189,16 @@ export async function buildApp(params: {
     return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
   }
 
+  function unescapeHtml(s: string): string {
+    return s
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&#x27;/gi, "'");
+  }
+
   function descriptionTextToHtml(text: string): string | null {
     const t = text.trim();
     if (!t) return null;
@@ -1076,7 +1086,9 @@ export async function buildApp(params: {
       .orderBy('role_name', 'asc')
       .execute();
 
-    const description = (event.description_html ?? '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p>/gi, '\n\n').replace(/<\/?p>/gi, '');
+    const description = unescapeHtml(
+      (event.description_html ?? '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p>/gi, '\n\n').replace(/<\/?p>/gi, '')
+    );
     return render(reply, 'manager_event_edit.njk', {
       error,
       ok,
