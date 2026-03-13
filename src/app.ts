@@ -243,6 +243,19 @@ export async function buildApp(params: {
     return d.toISOString();
   }
 
+  function toDateOnly(value: unknown): string {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      const v = value.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? v : d.toISOString().slice(0, 10);
+    }
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    const d = new Date(String(value));
+    return Number.isNaN(d.getTime()) ? String(value) : d.toISOString().slice(0, 10);
+  }
+
   app.get('/', async (_req, reply) => {
     const events = await listPublicEvents(params.db);
     const showSeedHint = config.env === 'development' || config.env === 'test';
@@ -649,10 +662,12 @@ export async function buildApp(params: {
 
     const mapped = events.map((e) => {
       const stats = statsByEvent.get(e.id) ?? { shiftCount: 0, filled: 0, capacity: 0 };
+      const start = toDateOnly(e.start_date);
+      const end = toDateOnly(e.end_date);
       return {
         id: e.id,
         title: e.title,
-        dateRange: e.start_date === e.end_date ? e.start_date : `${e.start_date} – ${e.end_date}`,
+        dateRange: start && end && start !== end ? `${start} – ${end}` : start || end,
         publicUrl: `/events/${encodeURIComponent(e.slug ?? e.id)}`,
         isPublished: e.is_published,
         cancelledAt: e.cancelled_at,
@@ -710,7 +725,7 @@ export async function buildApp(params: {
         eventId: s.event_id,
         eventTitle: s.event_title,
         roleName: s.role_name,
-        date: String(s.shift_date),
+        date: toDateOnly(s.shift_date),
         timeRange: `${String(s.start_time)}–${String(s.end_time)}`,
         filled,
         max,
@@ -963,16 +978,20 @@ export async function buildApp(params: {
       .orderBy('events.start_date', 'desc')
       .execute();
 
-    const mapEvent = (e: any) => ({
-      id: e.id,
-      title: e.title,
-      organizationName: e.organization_name,
-      dateRange: e.start_date === e.end_date ? e.start_date : `${e.start_date} – ${e.end_date}`,
-      isPublished: e.is_published,
-      isArchived: e.is_archived,
-      cancelledAt: e.cancelled_at,
-      publicUrl: `/events/${encodeURIComponent(e.slug ?? e.id)}`
-    });
+    const mapEvent = (e: any) => {
+      const start = toDateOnly(e.start_date);
+      const end = toDateOnly(e.end_date);
+      return {
+        id: e.id,
+        title: e.title,
+        organizationName: e.organization_name,
+        dateRange: start && end && start !== end ? `${start} – ${end}` : start || end,
+        isPublished: e.is_published,
+        isArchived: e.is_archived,
+        cancelledAt: e.cancelled_at,
+        publicUrl: `/events/${encodeURIComponent(e.slug ?? e.id)}`
+      };
+    };
 
     const activeEvents = events.filter((e: any) => !e.is_archived).map(mapEvent);
     const archivedEvents = events.filter((e: any) => e.is_archived).map(mapEvent);
@@ -1097,8 +1116,8 @@ export async function buildApp(params: {
         id: event.id,
         title: event.title,
         organizationId: event.organization_id,
-        startDate: event.start_date,
-        endDate: event.end_date,
+        startDate: toDateOnly(event.start_date),
+        endDate: toDateOnly(event.end_date),
         description,
         locationName: event.location_name ?? '',
         locationMapUrl: event.location_map_url ?? '',
@@ -1117,7 +1136,7 @@ export async function buildApp(params: {
       shifts: shifts.map((s) => ({
         id: s.id,
         roleName: s.role_name,
-        shiftDate: s.shift_date,
+        shiftDate: toDateOnly(s.shift_date),
         startTime: String(s.start_time).slice(0, 5),
         endTime: String(s.end_time).slice(0, 5),
         roleDescription: s.role_description ?? '',
@@ -1595,7 +1614,7 @@ export async function buildApp(params: {
       shifts: shifts.map((sh) => ({
         id: sh.id,
         roleName: sh.role_name,
-        shiftDate: sh.shift_date,
+        shiftDate: toDateOnly(sh.shift_date),
         startTime: String(sh.start_time).slice(0, 5),
         endTime: String(sh.end_time).slice(0, 5),
         maxVolunteers: sh.max_volunteers,
