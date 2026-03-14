@@ -2,37 +2,33 @@
 
 Node + Fastify + Nunjucks + Postgres implementation per `VolunteerFlow_PRD_v1.0.md`.
 
-## Local dev
+Operator runbook: `OPERATORS_MANUAL.md`
+
+## Staging / production
+
+VolunteerFlow is intended to be run via Docker Compose on a server (staging and above). The app runs DB migrations automatically on startup.
+
+1) Create `.env.staging` on the server (start from `.env.staging.example`) and set at least:
+- `APP_URL`
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `ADMIN_TOKEN`
+
+2) Start the app:
 
 ```bash
-docker compose up
+docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
 ```
 
-Open `http://localhost:3000/`.
+Optional profiles:
+- TLS via Caddy: add `--profile caddy` (configure `CADDY_HOST`/`CADDY_EMAIL` in `.env.staging`)
+- Local Postgres (if not using a managed DB): add `--profile localdb`
 
-Operator guide: `OPERATORS_MANUAL.md`
-App logs are written to `logs/app.log` (local dev compose).
+Notes:
+- App logs are written to `logs/app.log`.
+- Volunteer “email me a link” requires SMTP to be configured in `.env.staging` (see `.env.staging.example`).
 
-Note: `node_modules` is kept inside the container (not bind-mounted) to avoid host/container permission and platform issues.
-If you previously ran `docker compose up` before this change, your `node_modules/` or `package-lock.json` may be owned by root; fix with:
-
-```bash
-sudo chown -R "$(id -u)":"$(id -g)" node_modules package-lock.json
-```
-
-To seed a demo event in dev:
-
-```bash
-docker compose exec app npm run seed
-```
-
-`seed` prints dev admin/manager credentials (for `/admin/login` and `/manager/login`) to stdout.
-
-Volunteer self-service:
-
-- `http://localhost:3000/my` lets a volunteer request an email link to view their upcoming signups (SMTP integration TBD; dev shows a shortcut link).
-
-Admin/Manager:
+Admin/Manager entrypoints:
 
 - First-time setup (only if no Super Admin exists yet): `GET /admin/setup` (dev/test), or send `x-admin-token: $ADMIN_TOKEN` in prod.
 - Admin login: `GET /admin/login`
@@ -50,6 +46,22 @@ Ops (temporary, until admin/manager UI exists):
 
 - Cancel an event + notify volunteers: `POST /ops/events/:slugOrId/cancel` with header `x-admin-token: $ADMIN_TOKEN` and JSON body `{"message":"..."}`.
 
+## Development (optional)
+
+Local dev:
+
+```bash
+docker compose up
+```
+
+To seed a demo event in dev:
+
+```bash
+docker compose exec app npm run seed
+```
+
+`seed` prints dev admin/manager credentials (for `/admin/login` and `/manager/login`) to stdout.
+
 Testing:
 
 - Run integration tests with Docker: `npm run test:db`
@@ -60,10 +72,3 @@ Postgres is not exposed on a host port by default; to connect from your machine,
 ```bash
 docker compose exec db psql -U volunteerflow volunteerflow
 ```
-
-## Staging/prod (with Caddy/TLS)
-
-```bash
-docker compose -f docker-compose.staging.yml up --build
-```
-# volunteerflow

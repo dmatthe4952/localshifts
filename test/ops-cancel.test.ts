@@ -70,6 +70,7 @@ describe.skipIf(!DATABASE_URL)('ops cancellation', () => {
 
     const sends = await db
       .selectFrom('notification_sends')
+      .where('kind', '=', 'event_cancelled')
       .select((eb: any) => eb.fn.countAll<number>().as('c'))
       .executeTakeFirst();
     expect(Number(sends?.c ?? 0)).toBe(1);
