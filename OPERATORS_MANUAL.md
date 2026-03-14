@@ -227,6 +227,10 @@ View it:
 If a deploy fails with a Nunjucks template parse error (or you want to verify templates on a running container), call:
 - `curl -fsS -H "x-admin-token: $ADMIN_TOKEN" "$APP_URL/ops/templates/compile"`
 
+### Ops: deployed version
+To verify what’s deployed (git SHA + build timestamp) without SSH:
+- `curl -fsS -H "x-admin-token: $ADMIN_TOKEN" "$APP_URL/ops/version"`
+
 ### Staging: deploy (managed Postgres + existing reverse proxy on the host)
 Use this if your staging server already has nginx/Traefik/Apache/Caddy handling ports `80/443`.
 

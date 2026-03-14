@@ -11,10 +11,11 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 echo "[1/2] Build image (runs template compile check)"
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build "$SERVICE"
+GIT_SHA="${GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || true)}"
+BUILD_TIME="${BUILD_TIME:-$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || true)}"
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --build-arg "GIT_SHA=$GIT_SHA" --build-arg "BUILD_TIME=$BUILD_TIME" "$SERVICE"
 
 echo "[2/2] Start/recreate service"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build "$SERVICE"
 
 echo "Staging deploy: OK"
-

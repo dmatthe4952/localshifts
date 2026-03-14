@@ -18,6 +18,10 @@ RUN npm ci --omit=dev
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ARG GIT_SHA=""
+ARG BUILD_TIME=""
+ENV APP_GIT_SHA=$GIT_SHA
+ENV APP_BUILD_TIME=$BUILD_TIME
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/views ./views

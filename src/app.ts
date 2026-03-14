@@ -2102,6 +2102,24 @@ export async function buildApp(params: {
     }
   });
 
+  app.get('/ops/version', async (req, reply) => {
+    try {
+      requireAdminToken(req);
+      const gitSha = process.env.APP_GIT_SHA ?? '';
+      const builtAt = process.env.APP_BUILD_TIME ?? '';
+      return reply.send({
+        ok: true,
+        env: config.env,
+        gitSha: gitSha || null,
+        builtAt: builtAt || null,
+        node: process.version
+      });
+    } catch (err: any) {
+      const statusCode = typeof err?.statusCode === 'number' ? err.statusCode : 500;
+      return reply.code(statusCode).send({ ok: false, error: String(err?.message ?? err) });
+    }
+  });
+
   app.get('/ops/diag/schema', async (req, reply) => {
     requireAdminToken(req);
 
