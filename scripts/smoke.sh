@@ -75,8 +75,25 @@ check_ops_health() {
   fi
 }
 
+check_ops_templates() {
+  say "[3/6] GET /ops/templates/compile"
+  if [ -z "$ADMIN_TOKEN" ]; then
+    say "  SKIP: ADMIN_TOKEN not set"
+    return 0
+  fi
+
+  body="$(curl -fsS --max-time 15 -H "x-admin-token: $ADMIN_TOKEN" "$BASE_URL/ops/templates/compile" || true)"
+  if printf '%s' "$body" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
+    say "  OK"
+  else
+    say "  FAIL: unexpected response"
+    printf '%s\n' "$body" | sed -n '1,10p'
+    fail=1
+  fi
+}
+
 check_public_pages() {
-  say "[3/5] GET / (HTML)"
+  say "[4/6] GET / (HTML)"
   code="$(http_status_html "$BASE_URL/" || true)"
   if [ "$code" = "200" ]; then
     say "  OK"
@@ -86,7 +103,7 @@ check_public_pages() {
     fail=1
   fi
 
-  say "[4/5] GET /admin/login (HTML)"
+  say "[5/6] GET /admin/login (HTML)"
   code="$(http_status_html "$BASE_URL/admin/login" || true)"
   if [ "$code" = "200" ] || [ "$code" = "303" ]; then
     say "  OK"
@@ -98,7 +115,7 @@ check_public_pages() {
 }
 
 check_email_test() {
-  say "[5/5] POST /ops/email/test"
+  say "[6/6] POST /ops/email/test"
   if [ -z "$ADMIN_TOKEN" ]; then
     say "  SKIP: ADMIN_TOKEN not set"
     return 0
@@ -123,6 +140,7 @@ check_email_test() {
 
 check_healthz
 check_ops_health
+check_ops_templates
 check_public_pages
 check_email_test
 

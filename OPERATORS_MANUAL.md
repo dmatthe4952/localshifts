@@ -243,6 +243,9 @@ Notes:
 Optional (staging): use the helper script to split “build” from “up” (and fail early if templates don’t compile):
 - `sh scripts/deploy-staging.sh`
 
+Optional (staging): one-command update from git + deploy + smoke test:
+- `GIT_REMOTE_URL=https://github.com/dmatthe4952/volunteerflow.git sh scripts/deploy-staging-from-git.sh`
+
 ### Staging: deploy (built-in Caddy HTTPS)
 Use this if you do **not** have a reverse proxy already.
 
