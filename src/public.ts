@@ -239,6 +239,7 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, category: EventCa
       dateRange,
       timeLabel,
       description: descriptionShort,
+      descriptionHtml: r.description_html,
       locationName: r.location_name,
       imagePath: r.image_path ?? '/event-images/default_volunteers.png',
       cancelledAt: r.cancelled_at,

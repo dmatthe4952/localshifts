@@ -107,7 +107,17 @@ a:hover { color: var(--brand-hover); }
 .card-date { color: var(--brand-hover); font-weight: 800; margin-top: 2px; }
 .card-time { margin-top: 8px; display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 700; }
 .icon-clock { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
-.card-desc { margin-top: 10px; color: var(--muted); line-height: 1.45; }
+.card-desc {
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.card-desc p { margin: 0; }
+.card-desc p + p { margin-top: 0.7em; }
 .card-cta {
   margin-top: 12px;
   display: inline-flex;

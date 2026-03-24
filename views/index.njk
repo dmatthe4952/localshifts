@@ -34,7 +34,9 @@
                 <span>{{ event.timeLabel }}</span>
               </div>
             {% endif %}
-            {% if event.description %}
+            {% if event.descriptionHtml %}
+              <div class="card-desc">{{ event.descriptionHtml | safe }}</div>
+            {% elseif event.description %}
               <div class="card-desc">{{ event.description }}</div>
             {% endif %}
             <div class="card-cta" aria-hidden="true">View Shifts & Sign Up</div>
