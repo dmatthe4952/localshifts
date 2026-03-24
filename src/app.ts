@@ -294,6 +294,35 @@ export async function buildApp(params: {
     return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
   }
 
+  function escapeHtmlAllowBasicFormatting(s: string): string {
+    // Allow only a tiny, safe subset of tags (no attributes).
+    // Everything else is escaped.
+    const tokens: Array<{ token: string; html: string }> = [];
+    let i = 0;
+    const tokenized = s.replace(/<\/?\s*(strong|b|em|i)\s*>/gi, (m, tagRaw) => {
+      const tag = String(tagRaw ?? '').toLowerCase();
+      const isClose = m.trim().startsWith('</');
+      const html =
+        tag === 'strong' || tag === 'b'
+          ? isClose
+            ? '</strong>'
+            : '<strong>'
+          : tag === 'em' || tag === 'i'
+            ? isClose
+              ? '</em>'
+              : '<em>'
+            : '';
+      if (!html) return m;
+      const token = `[[VF_TAG_${i++}_${crypto.randomBytes(4).toString('hex')}]]`;
+      tokens.push({ token, html });
+      return token;
+    });
+
+    let out = escapeHtml(tokenized);
+    for (const t of tokens) out = out.replaceAll(t.token, t.html);
+    return out;
+  }
+
   function unescapeHtml(s: string): string {
     return s
       .replace(/&amp;/g, '&')
@@ -307,7 +336,7 @@ export async function buildApp(params: {
   function descriptionTextToHtml(text: string): string | null {
     const t = text.trim();
     if (!t) return null;
-    const escaped = escapeHtml(t);
+    const escaped = escapeHtmlAllowBasicFormatting(t);
     const paragraphs = escaped
       .split(/\n\s*\n/g)
       .map((p) => p.trim().replace(/\n/g, '<br />'))
@@ -1496,6 +1525,7 @@ export async function buildApp(params: {
     const title = String(body.title ?? '').trim();
     const organizationId = String(body.organizationId ?? '').trim();
     const category = String(body.category ?? '').trim();
+    const confirmationEmailNote = String(body.confirmationEmailNote ?? '');
     const date = String(body.date ?? '').trim();
     const description = String(body.description ?? '');
     const locationName = String(body.locationName ?? '').trim();
@@ -1507,6 +1537,7 @@ export async function buildApp(params: {
       const cats = await listEventCategories(params.db);
       const allowed = new Set(cats.map((c) => c.slug));
       const cat = category && allowed.has(category) ? category : 'normal';
+      if (confirmationEmailNote.length > 2000) throw new Error('Confirmation note is too long (max 2000 characters).');
       const startDate = parseDateOnly(date);
       const slug = await uniqueEventSlug(title);
 
@@ -1518,6 +1549,7 @@ export async function buildApp(params: {
           slug,
           title,
           category: cat as EventCategory,
+          confirmation_email_note: confirmationEmailNote.trim() ? confirmationEmailNote.trim() : null,
           description_html: descriptionTextToHtml(description),
           location_name: locationName || null,
           location_map_url: locationMapUrl || null,
@@ -1553,6 +1585,7 @@ export async function buildApp(params: {
         'title',
         'organization_id',
         'category',
+        'confirmation_email_note',
         'start_date',
         'end_date',
         'description_html',
@@ -1611,6 +1644,7 @@ export async function buildApp(params: {
         title: event.title,
         organizationId: event.organization_id,
         category: event.category ?? 'normal',
+        confirmationEmailNote: event.confirmation_email_note ?? '',
         startDate: toDateOnly(event.start_date),
         endDate: toDateOnly(event.end_date),
         description,
@@ -1652,6 +1686,7 @@ export async function buildApp(params: {
     const title = String(body.title ?? '').trim();
     const organizationId = String(body.organizationId ?? '').trim();
     const category = String(body.category ?? '').trim();
+    const confirmationEmailNote = String(body.confirmationEmailNote ?? '');
     const startDate = String(body.startDate ?? '').trim();
     const endDate = String(body.endDate ?? '').trim();
     const description = String(body.description ?? '');
@@ -1664,6 +1699,7 @@ export async function buildApp(params: {
       const cats = await listEventCategories(params.db);
       const allowed = new Set(cats.map((c) => c.slug));
       const cat = (category && allowed.has(category) ? category : 'normal') as EventCategory;
+      if (confirmationEmailNote.length > 2000) throw new Error('Confirmation note is too long (max 2000 characters).');
       const sd = parseDateOnly(startDate);
       const ed = parseDateOnly(endDate);
 
@@ -1673,6 +1709,7 @@ export async function buildApp(params: {
           title,
           organization_id: organizationId,
           category: cat,
+          confirmation_email_note: confirmationEmailNote.trim() ? confirmationEmailNote.trim() : null,
           start_date: sd,
           end_date: ed,
           description_html: descriptionTextToHtml(description),

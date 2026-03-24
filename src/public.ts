@@ -30,6 +30,20 @@ function dateKey(value: unknown): string {
 }
 
 function formatDate(value: unknown): string {
+  if (typeof value === 'string') {
+    const v = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      // Date-only values should not shift across timezones.
+      const d = new Date(`${v}T00:00:00Z`);
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'UTC',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }).format(d);
+    }
+  }
   const dt = parseDateInput(value);
   if (!dt) return String(value ?? '');
   try {
@@ -46,6 +60,14 @@ function formatDate(value: unknown): string {
 }
 
 function formatDateShort(value: unknown): string {
+  if (typeof value === 'string') {
+    const v = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      // Date-only values should not shift across timezones.
+      const d = new Date(`${v}T00:00:00Z`);
+      return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }).format(d);
+    }
+  }
   const dt = parseDateInput(value);
   if (!dt) return String(value ?? '');
   try {

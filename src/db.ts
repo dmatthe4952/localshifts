@@ -39,6 +39,7 @@ export interface EventsTable {
   slug: string | null;
   title: string;
   category: EventCategory;
+  confirmation_email_note: string | null;
   description_html: string | null;
   location_name: string | null;
   location_map_url: string | null;

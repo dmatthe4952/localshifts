@@ -83,6 +83,10 @@
         <span>Description</span>
         <textarea name="description" rows="6">{{ event.description }}</textarea>
       </label>
+      <label>
+        <span>Confirmation email note (optional)</span>
+        <textarea name="confirmationEmailNote" rows="4" maxlength="2000" placeholder="This message will be included in the volunteer’s signup confirmation email.">{{ event.confirmationEmailNote }}</textarea>
+      </label>
       <div class="grid2">
         <label>
           <span>Location name</span>

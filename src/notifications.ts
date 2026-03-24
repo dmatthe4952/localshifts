@@ -3,9 +3,49 @@ import { config } from './config.js';
 import type { DB } from './db.js';
 import { sendEmail } from './email.js';
 
-function safeIso(value: unknown): string {
+function dateOnlyKey(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const v = String(value ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v : d.toISOString().slice(0, 10);
+}
+
+function formatDateOnly(value: unknown): string {
+  const key = dateOnlyKey(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return String(value ?? '');
+  // Use UTC to avoid shifting date-only values across timezones.
+  const d = new Date(`${key}T12:00:00Z`);
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' }).format(d);
+}
+
+function formatDateTimeLocal(value: unknown): string {
   const d = value instanceof Date ? value : new Date(String(value));
-  return Number.isNaN(d.getTime()) ? String(value ?? '') : d.toISOString();
+  if (Number.isNaN(d.getTime())) return String(value ?? '');
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: config.timezone,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(d);
+}
+
+function escapeHtml(input: unknown): string {
+  return String(input ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}
+
+function escapeAttr(input: unknown): string {
+  // For URLs in href. Basic escaping + strip control chars.
+  const s = String(input ?? '').replace(/[\u0000-\u001F\u007F]/g, '');
+  return escapeHtml(s);
+}
+
+function plainTextToHtml(text: string): string {
+  const t = String(text ?? '');
+  const escaped = escapeHtml(t);
+  return escaped.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '<br/>');
 }
 
 async function sendAndRecord(params: {
@@ -16,6 +56,7 @@ async function sendAndRecord(params: {
   toEmail: string;
   subject: string;
   body: string;
+  html?: string;
 }) {
   const inserted = await params.db
     .insertInto('notification_sends')
@@ -35,7 +76,7 @@ async function sendAndRecord(params: {
   if (!inserted) return { skipped: true as const };
 
   try {
-    await sendEmail({ to: params.toEmail, subject: params.subject, text: params.body });
+    await sendEmail({ to: params.toEmail, subject: params.subject, text: params.body, html: params.html });
     await params.db
       .updateTable('notification_sends')
       .set({ status: 'sent', sent_at: new Date().toISOString(), error: null })
@@ -65,6 +106,8 @@ export async function sendSignupConfirmationWithKind(db: Kysely<DB>, signupId: s
       'signups.cancel_token',
       'events.id as event_id',
       'events.title as event_title',
+      'events.slug as event_slug',
+      'events.confirmation_email_note',
       'organizations.name as organization_name',
       'shifts.role_name',
       'shifts.shift_date',
@@ -80,20 +123,44 @@ export async function sendSignupConfirmationWithKind(db: Kysely<DB>, signupId: s
   if (!row.cancel_token) return;
 
   const cancelUrl = `${config.appUrl}/cancel/${encodeURIComponent(row.cancel_token)}`;
+  const eventUrl = `${config.appUrl}/events/${encodeURIComponent((row as any).event_slug ?? row.event_id)}`;
   const subject = `Signup confirmed: ${row.event_title}`;
+  const when = `${formatDateOnly(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`;
+  const note = String((row as any).confirmation_email_note ?? '').trim();
   const body = [
     `Hi ${row.first_name},`,
     '',
     `You’re signed up for:`,
     `${row.event_title} (${row.organization_name})`,
     `Shift: ${row.role_name}`,
-    `When: ${String(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`,
+    `When: ${when}`,
     row.location_name ? `Where: ${row.location_name}` : '',
-    row.location_map_url ? `Map: ${row.location_map_url}` : '',
+    row.location_map_url ? `Directions: ${row.location_map_url}` : '',
+    `Event page: ${eventUrl}`,
+    note ? '' : '',
+    note ? `Message from the organizer:` : '',
+    note ? note : '',
     '',
-    `Cancel your signup: ${cancelUrl}`,
+    `Need to Cancel? Click here: ${cancelUrl}`,
     '',
     `— VolunteerFlow`
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = [
+    `<p>Hi ${escapeHtml(row.first_name)},</p>`,
+    `<p>You’re signed up for:</p>`,
+    `<p><strong>${escapeHtml(row.event_title)}</strong> (${escapeHtml(row.organization_name)})<br/>` +
+      `Shift: ${escapeHtml(row.role_name)}<br/>` +
+      `When: ${escapeHtml(when)}<br/>` +
+      (row.location_name ? `Where: ${escapeHtml(row.location_name)}<br/>` : '') +
+      (row.location_map_url ? `<a href="${escapeAttr(row.location_map_url)}">Click for directions</a><br/>` : '') +
+      `<a href="${escapeAttr(eventUrl)}">View event details</a><br/>` +
+      `</p>`,
+    note ? `<p><strong>Message from the organizer</strong><br/>${plainTextToHtml(note)}</p>` : '',
+    `<p><a href="${escapeAttr(cancelUrl)}">Need to Cancel? Click here.</a></p>`,
+    `<p>— VolunteerFlow</p>`
   ]
     .filter(Boolean)
     .join('\n');
@@ -105,7 +172,8 @@ export async function sendSignupConfirmationWithKind(db: Kysely<DB>, signupId: s
     signupId: row.signup_id,
     toEmail: row.email,
     subject,
-    body
+    body,
+    html
   });
 }
 
@@ -141,8 +209,8 @@ export async function sendCancellationEmails(db: Kysely<DB>, signupId: string, c
 
   if (!row) return;
 
-  const when = `${String(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`;
-  const canceledIso = safeIso(cancelledAt);
+  const when = `${formatDateOnly(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`;
+  const canceledLocal = formatDateTimeLocal(cancelledAt);
 
   await sendAndRecord({
     db,
@@ -159,7 +227,7 @@ export async function sendCancellationEmails(db: Kysely<DB>, signupId: string, c
       `Shift: ${row.role_name}`,
       `When: ${when}`,
       '',
-      `Cancelled at: ${canceledIso}`,
+      `Cancelled at: ${canceledLocal}`,
       '',
       `— VolunteerFlow`
     ].join('\n')
@@ -214,7 +282,7 @@ export async function sendManagerRemovalNotice(db: Kysely<DB>, signupId: string)
     .executeTakeFirst();
 
   if (!row) return;
-  const when = `${String(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`;
+  const when = `${formatDateOnly(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`;
   await sendAndRecord({
     db,
     kind: 'manager_removal_notice',

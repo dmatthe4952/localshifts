@@ -5,6 +5,7 @@ export type EmailMessage = {
   to: string;
   subject: string;
   text: string;
+  html?: string;
 };
 
 function canSendRealEmail(): boolean {
@@ -21,7 +22,7 @@ function redactEmail(email: string): string {
 export async function sendEmail(msg: EmailMessage): Promise<void> {
   if (!canSendRealEmail()) {
     // eslint-disable-next-line no-console
-    console.log('[email:dev]', { to: redactEmail(msg.to), subject: msg.subject, text: msg.text });
+    console.log('[email:dev]', { to: redactEmail(msg.to), subject: msg.subject, text: msg.text, html: msg.html });
     return;
   }
 
@@ -40,6 +41,7 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
     from: config.smtp.fromName ? `"${config.smtp.fromName}" <${config.smtp.fromEmail}>` : config.smtp.fromEmail,
     to: msg.to,
     subject: msg.subject,
-    text: msg.text
+    text: msg.text,
+    html: msg.html
   });
 }
