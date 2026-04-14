@@ -86,6 +86,8 @@ async function main() {
         slug: eventSlug,
         title: eventTitle,
         category: 'normal',
+        is_featured: false,
+        tags: ['food', 'community'],
         description_html:
           '<p>Help us pack and distribute food boxes for local families. Please choose one shift.</p><p><strong>Wear closed-toe shoes.</strong></p>',
         location_name: '123 Main St, Greenville SC',

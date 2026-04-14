@@ -15,12 +15,12 @@ import nunjucks from 'nunjucks';
 import { config } from './config.js';
 import type { DB, EventCategory } from './db.js';
 import { runMigrations } from './migrations.js';
-import { hexToRgbTriplet, listEventCategories } from './event_categories.js';
 import {
   cancelSignup,
   createSignup,
   findActiveSignupByCancelToken,
   getPublicEventBySlugOrIdForViewer,
+  listPublicEventTags,
   listPublicEventsFiltered,
   listViewerActiveSignups,
   requestMySignupsToken,
@@ -242,18 +242,7 @@ export async function buildApp(params: {
 
   async function render(reply: any, template: string, data: any) {
     const currentUser = (reply.request as any).currentUser ?? null;
-    const navCategoriesRaw =
-      Array.isArray(data?.navCategories) && data.navCategories.length > 0 ? null : await listEventCategories(params.db);
-    const navCategories =
-      Array.isArray(data?.navCategories) && data.navCategories.length > 0
-        ? data.navCategories
-        : navCategoriesRaw!.map((c) => ({
-            slug: c.slug,
-            label: c.label,
-            colorHex: c.color,
-            colorRgb: hexToRgbTriplet(c.color) ?? '15, 118, 110'
-          }));
-    return reply.view(template, { ...data, currentUser, navCategories });
+    return reply.view(template, { ...data, currentUser });
   }
 
   function requireRole(req: any, role: 'super_admin' | 'event_manager') {
@@ -390,24 +379,39 @@ export async function buildApp(params: {
     return Number.isNaN(d.getTime()) ? String(value) : d.toISOString().slice(0, 10);
   }
 
+  function parseTagsInput(raw: string): string[] {
+    const normalizeTag = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+    const parts = String(raw ?? '')
+      .split(/[,;\n]+/)
+      .map((p) => normalizeTag(p))
+      .filter(Boolean);
+
+    const deduped: string[] = [];
+    const seen = new Set<string>();
+    for (const t of parts) {
+      if (t.length > 40) throw new Error('Tags are too long (max 40 characters each).');
+      if (seen.has(t)) continue;
+      seen.add(t);
+      deduped.push(t);
+      if (deduped.length > 20) throw new Error('Too many tags (max 20).');
+    }
+    return deduped;
+  }
+
   app.get('/', async (req, reply) => {
     const qs = req.query as Record<string, string | undefined>;
     const showAll = qs.all === '1';
-    const raw = typeof qs.category === 'string' ? qs.category.trim() : '';
-    const cats = await listEventCategories(params.db);
-    const navCategories = cats.map((c) => ({
-      slug: c.slug,
-      label: c.label,
-      colorHex: c.color,
-      colorRgb: hexToRgbTriplet(c.color) ?? '15, 118, 110'
-    }));
+    const rawTag = typeof qs.tag === 'string' ? qs.tag.trim().toLowerCase() : '';
+    const navTagsRaw = await listPublicEventTags(params.db);
+    const navTags = navTagsRaw.map((t) => ({ value: t, q: encodeURIComponent(t) }));
+    const allowed = new Set(navTagsRaw.map((t) => t.toLowerCase()));
+    const tag = showAll ? null : rawTag && allowed.has(rawTag) ? rawTag : null;
 
-    const allowed = new Set(cats.filter((c) => c.isActive).map((c) => c.slug));
-    const category: EventCategory | null = showAll ? null : raw && allowed.has(raw) ? raw : 'featured';
-
-    const events = await listPublicEventsFiltered(params.db, showAll ? null : category);
+    const events = await listPublicEventsFiltered(params.db, { tag });
+    const featuredEvents = events.filter((e: any) => e.isFeatured);
+    const otherEvents = events.filter((e: any) => !e.isFeatured);
     const showSeedHint = config.env === 'development' || config.env === 'test';
-    return render(reply, 'index.njk', { events, showSeedHint, navAddEventOnly: true, navCategories });
+    return render(reply, 'index.njk', { featuredEvents, otherEvents, showSeedHint, navAddEventOnly: true, navTags, tag });
   });
 
   app.get('/add-event', async (req, reply) => {
@@ -807,6 +811,9 @@ export async function buildApp(params: {
 
   app.get('/admin/dashboard', async (req, reply) => {
     requireRole(req, 'super_admin');
+    const qs = req.query as Record<string, string | undefined>;
+    const ok = typeof qs.ok === 'string' ? qs.ok : undefined;
+    const error = typeof qs.err === 'string' ? qs.err : undefined;
     const events = await params.db.selectFrom('events').select((eb) => eb.fn.countAll<number>().as('c')).executeTakeFirst();
     const upcomingShifts = await params.db
       .selectFrom('shifts')
@@ -819,12 +826,94 @@ export async function buildApp(params: {
       .where(sql<boolean>`created_at >= now() - interval '30 days'`)
       .executeTakeFirst();
     return render(reply, 'admin_dashboard.njk', {
+      ok,
+      error,
       stats: {
         events: Number(events?.c ?? 0),
         upcomingShifts: Number(upcomingShifts?.c ?? 0),
         signups30d: Number(signups30d?.c ?? 0)
       }
     });
+  });
+
+  app.post('/admin/impersonate', async (req, reply) => {
+    const currentUser = requireRole(req, 'super_admin');
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const query = String(body.query ?? '').trim();
+    if (!query) return reply.code(303).redirect(`/admin/dashboard?err=${encodeURIComponent('Manager name is required.')}`);
+
+    const sessionCookie = req?.cookies?.vf_sess;
+    if (typeof sessionCookie !== 'string' || !sessionCookie) {
+      return reply.code(303).redirect('/admin/login');
+    }
+    const uns = (req as any).unsignCookie(sessionCookie);
+    if (!uns?.valid || typeof uns.value !== 'string') {
+      return reply.code(303).redirect('/admin/login');
+    }
+    const sessionId = uns.value;
+
+    const rows = await params.db
+      .selectFrom('users')
+      .select(['id', 'email', 'display_name'])
+      .where('role', '=', 'event_manager')
+      .where('is_active', '=', true)
+      .where(sql<boolean>`(display_name ilike ${'%' + query + '%'} or email ilike ${'%' + query + '%'})`)
+      .orderBy('display_name', 'asc')
+      .limit(6)
+      .execute();
+
+    if (rows.length === 0) {
+      return reply.code(303).redirect(`/admin/dashboard?err=${encodeURIComponent('No matching manager found.')}`);
+    }
+    if (rows.length > 1) {
+      const hint = rows
+        .slice(0, 5)
+        .map((r: any) => `${r.display_name} <${r.email}>`)
+        .join(', ');
+      return reply
+        .code(303)
+        .redirect(`/admin/dashboard?err=${encodeURIComponent(`Multiple matches. Try a more specific name/email: ${hint}`)}`);
+    }
+
+    const manager = rows[0] as any;
+    if (!manager?.id) return reply.code(303).redirect(`/admin/dashboard?err=${encodeURIComponent('No matching manager found.')}`);
+
+    await params.db
+      .updateTable('sessions')
+      .set({
+        data: sql`coalesce(data, '{}'::jsonb) || ${JSON.stringify({ impersonate_user_id: manager.id })}::jsonb`
+      })
+      .where('id', '=', sessionId)
+      .where('user_id', '=', currentUser.id)
+      .execute();
+
+    return reply.code(303).redirect('/manager/dashboard');
+  });
+
+  app.post('/admin/impersonation/stop', async (req, reply) => {
+    const sessionCookie = req?.cookies?.vf_sess;
+    if (typeof sessionCookie !== 'string' || !sessionCookie) return reply.code(303).redirect('/');
+    const uns = (req as any).unsignCookie(sessionCookie);
+    if (!uns?.valid || typeof uns.value !== 'string') return reply.code(303).redirect('/');
+    const sessionId = uns.value;
+
+    const sess = await params.db
+      .selectFrom('sessions')
+      .innerJoin('users', 'users.id', 'sessions.user_id')
+      .select(['sessions.id', 'users.role'])
+      .where('sessions.id', '=', sessionId)
+      .executeTakeFirst();
+    if (!sess || sess.role !== 'super_admin') return reply.code(303).redirect('/');
+
+    await params.db
+      .updateTable('sessions')
+      .set({
+        data: sql`coalesce(data, '{}'::jsonb) - 'impersonate_user_id'`
+      })
+      .where('id', '=', sessionId)
+      .execute();
+
+    return reply.code(303).redirect('/admin/dashboard?ok=' + encodeURIComponent('Stopped impersonating.'));
   });
 
   app.get('/admin/events', async (req, reply) => {
@@ -1174,92 +1263,6 @@ export async function buildApp(params: {
     });
   });
 
-  // Manager: Event categories
-  app.get('/manager/categories', async (req, reply) => {
-    requireRole(req, 'event_manager');
-    const qs = req.query as Record<string, string | undefined>;
-    const error = typeof qs.err === 'string' ? qs.err : undefined;
-    const ok = typeof qs.ok === 'string' ? qs.ok : undefined;
-
-    const categories = (await listEventCategories(params.db, { includeInactive: true })).map((c) => ({
-      ...c,
-      colorRgb: hexToRgbTriplet(c.color) ?? '15, 118, 110'
-    }));
-    return render(reply, 'manager_categories.njk', {
-      error,
-      ok,
-      categories
-    });
-  });
-
-  app.post('/manager/categories', async (req, reply) => {
-    requireRole(req, 'event_manager');
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const label = String(body.label ?? '').trim();
-    const slugRaw = String(body.slug ?? '').trim();
-    const slug = slugRaw ? slugify(slugRaw) : slugify(label);
-    const color = String(body.color ?? '').trim();
-
-    try {
-      if (!label || label.length > 80) throw new Error('Invalid category name.');
-      if (!slug || slug.length > 60 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error('Invalid slug.');
-      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Invalid color (use #RRGGBB).');
-
-      await params.db
-        .insertInto('event_categories')
-        .values({
-          slug,
-          label,
-          color,
-          is_system: false,
-          is_active: true,
-          sort_order: 100
-        })
-        .execute();
-
-      return reply.code(303).redirect(`/manager/categories?ok=${encodeURIComponent('Category added.')}`);
-    } catch (err: any) {
-      return reply.code(303).redirect(`/manager/categories?err=${encodeURIComponent(String(err?.message ?? err))}`);
-    }
-  });
-
-  app.post('/manager/categories/:id', async (req, reply) => {
-    requireRole(req, 'event_manager');
-    const { id } = req.params as { id: string };
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const label = String(body.label ?? '').trim();
-    const color = String(body.color ?? '').trim();
-
-    try {
-      if (!label || label.length > 80) throw new Error('Invalid category name.');
-      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Invalid color (use #RRGGBB).');
-
-      await params.db.updateTable('event_categories').set({ label, color }).where('id', '=', id).execute();
-      return reply.code(303).redirect(`/manager/categories?ok=${encodeURIComponent('Category updated.')}`);
-    } catch (err: any) {
-      return reply.code(303).redirect(`/manager/categories?err=${encodeURIComponent(String(err?.message ?? err))}`);
-    }
-  });
-
-  app.post('/manager/categories/:id/delete', async (req, reply) => {
-    requireRole(req, 'event_manager');
-    const { id } = req.params as { id: string };
-    try {
-      const cat = await params.db
-        .selectFrom('event_categories')
-        .select(['id', 'slug', 'is_system'])
-        .where('id', '=', id)
-        .executeTakeFirst();
-      if (!cat) throw new Error('Category not found.');
-      if (cat.is_system) throw new Error('System categories cannot be deleted.');
-
-      await params.db.deleteFrom('event_categories').where('id', '=', id).execute();
-      return reply.code(303).redirect(`/manager/categories?ok=${encodeURIComponent('Category deleted.')}`);
-    } catch (err: any) {
-      return reply.code(303).redirect(`/manager/categories?err=${encodeURIComponent(String(err?.message ?? err))}`);
-    }
-  });
-
   // Admin organizations (needed before managers can create events)
   app.get('/admin/organizations', async (req, reply) => {
     requireRole(req, 'super_admin');
@@ -1519,8 +1522,7 @@ export async function buildApp(params: {
   app.get('/manager/events/new', async (req, reply) => {
     requireRole(req, 'event_manager');
     const orgs = await params.db.selectFrom('organizations').select(['id', 'name']).orderBy('name', 'asc').execute();
-    const categories = await listEventCategories(params.db);
-    return render(reply, 'manager_event_new.njk', { orgs, categories });
+    return render(reply, 'manager_event_new.njk', { orgs });
   });
 
   app.post('/manager/events/new', async (req, reply) => {
@@ -1528,7 +1530,8 @@ export async function buildApp(params: {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const title = String(body.title ?? '').trim();
     const organizationId = String(body.organizationId ?? '').trim();
-    const category = String(body.category ?? '').trim();
+    const isFeatured = String(body.isFeatured ?? '').trim() === 'on';
+    const tags = parseTagsInput(String(body.tags ?? ''));
     const confirmationEmailNote = String(body.confirmationEmailNote ?? '');
     const date = String(body.date ?? '').trim();
     const description = String(body.description ?? '');
@@ -1538,12 +1541,10 @@ export async function buildApp(params: {
     try {
       if (!title || title.length > 200) throw new Error('Invalid title.');
       if (!organizationId) throw new Error('Organization is required.');
-      const cats = await listEventCategories(params.db);
-      const allowed = new Set(cats.map((c) => c.slug));
-      const cat = category && allowed.has(category) ? category : 'normal';
       if (confirmationEmailNote.length > 2000) throw new Error('Confirmation note is too long (max 2000 characters).');
       const startDate = parseDateOnly(date);
       const slug = await uniqueEventSlug(title);
+      const category = (isFeatured ? 'featured' : 'normal') as EventCategory;
 
       const inserted = await params.db
         .insertInto('events')
@@ -1552,7 +1553,9 @@ export async function buildApp(params: {
           manager_id: currentUser.id,
           slug,
           title,
-          category: cat as EventCategory,
+          category,
+          is_featured: isFeatured,
+          tags,
           confirmation_email_note: confirmationEmailNote.trim() ? confirmationEmailNote.trim() : null,
           description_html: descriptionTextToHtml(description),
           location_name: locationName || null,
@@ -1571,8 +1574,7 @@ export async function buildApp(params: {
       return reply.code(303).redirect(`/manager/events/${inserted.id}/edit`);
     } catch (err: any) {
       const orgs = await params.db.selectFrom('organizations').select(['id', 'name']).orderBy('name', 'asc').execute();
-      const categories = await listEventCategories(params.db);
-      return render(reply, 'manager_event_new.njk', { orgs, categories, error: String(err?.message ?? err) });
+      return render(reply, 'manager_event_new.njk', { orgs, error: String(err?.message ?? err) });
     }
   });
 
@@ -1589,6 +1591,8 @@ export async function buildApp(params: {
         'title',
         'organization_id',
         'category',
+        'is_featured',
+        'tags',
         'confirmation_email_note',
         'start_date',
         'end_date',
@@ -1633,8 +1637,6 @@ export async function buildApp(params: {
       .orderBy('role_name', 'asc')
       .execute();
 
-    const categories = await listEventCategories(params.db);
-
     const description = unescapeHtml(
       (event.description_html ?? '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p>/gi, '\n\n').replace(/<\/?p>/gi, '')
     );
@@ -1642,12 +1644,12 @@ export async function buildApp(params: {
       error,
       ok,
       orgs,
-      categories,
       event: {
         id: event.id,
         title: event.title,
         organizationId: event.organization_id,
-        category: event.category ?? 'normal',
+        isFeatured: Boolean((event as any).is_featured),
+        tags: Array.isArray((event as any).tags) ? ((event as any).tags as string[]).join(', ') : '',
         confirmationEmailNote: event.confirmation_email_note ?? '',
         startDate: toDateOnly(event.start_date),
         endDate: toDateOnly(event.end_date),
@@ -1689,7 +1691,8 @@ export async function buildApp(params: {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const title = String(body.title ?? '').trim();
     const organizationId = String(body.organizationId ?? '').trim();
-    const category = String(body.category ?? '').trim();
+    const isFeatured = String(body.isFeatured ?? '').trim() === 'on';
+    const tags = parseTagsInput(String(body.tags ?? ''));
     const confirmationEmailNote = String(body.confirmationEmailNote ?? '');
     const startDate = String(body.startDate ?? '').trim();
     const endDate = String(body.endDate ?? '').trim();
@@ -1700,19 +1703,19 @@ export async function buildApp(params: {
     try {
       if (!title || title.length > 200) throw new Error('Invalid title.');
       if (!organizationId) throw new Error('Organization is required.');
-      const cats = await listEventCategories(params.db);
-      const allowed = new Set(cats.map((c) => c.slug));
-      const cat = (category && allowed.has(category) ? category : 'normal') as EventCategory;
       if (confirmationEmailNote.length > 2000) throw new Error('Confirmation note is too long (max 2000 characters).');
       const sd = parseDateOnly(startDate);
       const ed = parseDateOnly(endDate);
+      const category = (isFeatured ? 'featured' : 'normal') as EventCategory;
 
       await params.db
         .updateTable('events')
         .set({
           title,
           organization_id: organizationId,
-          category: cat,
+          category,
+          is_featured: isFeatured,
+          tags,
           confirmation_email_note: confirmationEmailNote.trim() ? confirmationEmailNote.trim() : null,
           start_date: sd,
           end_date: ed,

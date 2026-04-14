@@ -5,7 +5,7 @@
     <p class="half-back">Sign up for a shift -- no account required.</p>
   </div>
   <h3>Upcoming Volunteer Opportunities</h3>
-  {% if events.length == 0 %}
+  {% if featuredEvents.length == 0 and otherEvents.length == 0 %}
     <div class="panel">
       <p class="muted">No published events yet.</p>
       {% if showSeedHint %}
@@ -13,36 +13,83 @@
       {% endif %}
     </div>
   {% else %}
-    <div class="grid">
-      {% for event in events %}
-        <a class="card" data-cat="{{ event.category.slug }}" style="--cat-rgb: {{ event.category.colorRgb }}; --cat-hex: {{ event.category.colorHex }};" href="{{ event.url }}">
-          <img class="card-img" src="{{ event.imagePath }}" alt="{{ event.title }}" />
-          <div class="card-hd">
-            <div class="title">{{ event.title }}</div>
-          </div>
-          <div class="card-bd">
-            <div class="card-meta">
-              <div class="card-date">{{ event.dateRange }}</div>
-              <span class="badge badge-cat" style="--cat-rgb: {{ event.category.colorRgb }}; --cat-hex: {{ event.category.colorHex }};">{{ event.category.label }}</span>
+    {% if featuredEvents.length > 0 %}
+      <h3 style="margin-top:14px">Featured</h3>
+      <div class="grid">
+        {% for event in featuredEvents %}
+          <a class="card cat-featured" href="{{ event.url }}">
+            <img class="card-img" src="{{ event.imagePath }}" alt="{{ event.title }}" />
+            <div class="card-hd">
+              <div class="title">{{ event.title }}</div>
             </div>
-            {% if event.timeLabel %}
-              <div class="card-time" aria-label="Time">
-                <svg class="icon-clock" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <circle cx="12" cy="12" r="9"></circle>
-                  <path d="M12 7v6l4 2"></path>
-                </svg>
-                <span>{{ event.timeLabel }}</span>
+            <div class="card-bd">
+              <div class="card-meta">
+                <div class="card-date">{{ event.dateRange }}</div>
+                <div class="right" style="gap:6px; flex-wrap:wrap; justify-content:flex-end">
+                  <span class="badge featured">Featured</span>
+                  {% for t in event.tags %}
+                    <span class="badge tag">{{ t }}</span>
+                  {% endfor %}
+                </div>
               </div>
-            {% endif %}
-            {% if event.descriptionHtml %}
-              <div class="card-desc">{{ event.descriptionHtml | safe }}</div>
-            {% elseif event.description %}
-              <div class="card-desc">{{ event.description }}</div>
-            {% endif %}
-            <div class="card-cta" aria-hidden="true">View Shifts & Sign Up</div>
-          </div>
-        </a>
-      {% endfor %}
-    </div>
+              {% if event.timeLabel %}
+                <div class="card-time" aria-label="Time">
+                  <svg class="icon-clock" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 7v6l4 2"></path>
+                  </svg>
+                  <span>{{ event.timeLabel }}</span>
+                </div>
+              {% endif %}
+              {% if event.descriptionHtml %}
+                <div class="card-desc">{{ event.descriptionHtml | safe }}</div>
+              {% elseif event.description %}
+                <div class="card-desc">{{ event.description }}</div>
+              {% endif %}
+              <div class="card-cta" aria-hidden="true">View Shifts & Sign Up</div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if otherEvents.length > 0 %}
+      <h3 style="margin-top:14px">All Events</h3>
+      <div class="grid">
+        {% for event in otherEvents %}
+          <a class="card" href="{{ event.url }}">
+            <img class="card-img" src="{{ event.imagePath }}" alt="{{ event.title }}" />
+            <div class="card-hd">
+              <div class="title">{{ event.title }}</div>
+            </div>
+            <div class="card-bd">
+              <div class="card-meta">
+                <div class="card-date">{{ event.dateRange }}</div>
+                <div class="right" style="gap:6px; flex-wrap:wrap; justify-content:flex-end">
+                  {% for t in event.tags %}
+                    <span class="badge tag">{{ t }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+              {% if event.timeLabel %}
+                <div class="card-time" aria-label="Time">
+                  <svg class="icon-clock" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M12 7v6l4 2"></path>
+                  </svg>
+                  <span>{{ event.timeLabel }}</span>
+                </div>
+              {% endif %}
+              {% if event.descriptionHtml %}
+                <div class="card-desc">{{ event.descriptionHtml | safe }}</div>
+              {% elseif event.description %}
+                <div class="card-desc">{{ event.description }}</div>
+              {% endif %}
+              <div class="card-cta" aria-hidden="true">View Shifts & Sign Up</div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
   {% endif %}
 {% endblock %}

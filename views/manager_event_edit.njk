@@ -62,12 +62,12 @@
         </select>
       </label>
       <label>
-        <span>Category</span>
-        <select name="category" required>
-          {% for c in categories %}
-            <option value="{{ c.slug }}" {% if event.category == c.slug %}selected{% endif %}>{{ c.label }}</option>
-          {% endfor %}
-        </select>
+        <span>Featured?</span>
+        <input type="checkbox" name="isFeatured" {% if event.isFeatured %}checked{% endif %} />
+      </label>
+      <label>
+        <span>Tags (comma-separated)</span>
+        <input name="tags" maxlength="500" value="{{ event.tags }}" placeholder="e.g. food, outdoors, community" />
       </label>
       <div class="grid2">
         <label>

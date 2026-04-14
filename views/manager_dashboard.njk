@@ -1,13 +1,19 @@
 {% extends "layout.njk" %}
 {% block content %}
   <h1>Manager Dashboard</h1>
+  {% if currentUser.impersonator %}
+    <div class="flash err">
+      <div>
+        <strong>Impersonating:</strong> {{ currentUser.displayName }} ({{ currentUser.email }}) — signed in as admin {{ currentUser.impersonator.email }}
+      </div>
+    </div>
+  {% endif %}
   <div class="panel">
     <div class="meta">Signed in as {{ currentUser.displayName }}</div>
     <div class="actions" style="margin-top:12px">
       <a class="btn primary" href="/manager/events">Manage Events</a>
       <a class="btn" href="/manager/events/new">Create Event</a>
       <a class="btn" href="/manager/templates">Shift Templates</a>
-      <a class="btn" href="/manager/categories">Categories</a>
     </div>
   </div>
 

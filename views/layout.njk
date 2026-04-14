@@ -14,31 +14,36 @@
             <img class="brand-logo" src="/public/images/official_logo.png" alt="VolunteerFlow" />
           </a>
           <div class="nav-links">
-            {% if navCategories %}
+            {% if navTags %}
               <div class="nav-dd">
-                <a class="nav-dd-trigger" href="/?all=1" aria-label="Filter events by category">
+                <a class="nav-dd-trigger" href="/" aria-label="Filter events by tag">
                   <svg class="icon-funnel" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <path d="M3 5h18l-7 8v5l-4 2v-7z"></path>
                   </svg>
-                  <span>All Volunteer Events</span>
+                  <span>{% if tag %}Tag: {{ tag }}{% else %}All Volunteer Events{% endif %}</span>
                   <svg class="icon-caret" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <path d="M7 10l5 5 5-5"></path>
                   </svg>
                 </a>
-                <div class="nav-dd-menu" role="menu" aria-label="Event categories">
-                  <a class="nav-dd-item" role="menuitem" href="/?all=1">All Events</a>
-                  {% for c in navCategories %}
-                    <a class="nav-dd-item" role="menuitem" href="/?category={{ c.slug }}">
-                      <span class="badge badge-cat" style="--cat-rgb: {{ c.colorRgb }}; --cat-hex: {{ c.colorHex }};">{{ c.label }}</span>
+                <div class="nav-dd-menu" role="menu" aria-label="Event tags">
+                  <a class="nav-dd-item" role="menuitem" href="/">All Events</a>
+                  {% for t in navTags %}
+                    <a class="nav-dd-item" role="menuitem" href="/?tag={{ t.q }}">
+                      <span class="badge tag">{{ t.value }}</span>
                     </a>
                   {% endfor %}
                 </div>
               </div>
             {% else %}
-              <a href="/?all=1">All Volunteer Events</a>
+              <a href="/">All Volunteer Events</a>
             {% endif %}
             <a href="/my">My Signups</a>
             {% if currentUser %}
+              {% if currentUser.impersonator %}
+                <form method="post" action="/admin/impersonation/stop" style="display:inline">
+                  <button class="btn" type="submit" style="padding:6px 10px">Stop Impersonating</button>
+                </form>
+              {% endif %}
               {% if currentUser.role == 'super_admin' %}
                 <a href="/admin/dashboard">Admin</a>
               {% endif %}

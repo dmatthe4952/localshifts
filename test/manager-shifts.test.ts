@@ -150,7 +150,7 @@ describe.skipIf(!DATABASE_URL)('manager shift edit/delete', () => {
       method: 'POST',
       url: `/manager/events/${eventId}/signups/add`,
       headers: { cookie: mgrCookie, 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ shiftId, firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' })
+      payload: formEncode({ shiftId, firstName: 'A', lastName: 'Lovelace', email: 'ada@example.com' })
     });
 
     const delRes = await app.inject({
@@ -201,4 +201,3 @@ describe.skipIf(!DATABASE_URL)('manager shift edit/delete', () => {
     expect(gone).toBeUndefined();
   });
 });
-

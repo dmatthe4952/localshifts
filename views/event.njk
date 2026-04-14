@@ -93,17 +93,17 @@
                 <form class="form" method="post" action="{{ event.url }}/shifts/{{ shift.id }}/signup">
                   <div class="grid2">
                     <label>
-                      <span>First name</span>
-                      <input name="firstName" autocomplete="given-name" required data-vf="firstName" />
+                      <span>First name <span class="muted">(aliases allowed)</span></span>
+                      <input name="firstName" autocomplete="given-name" required minlength="1" maxlength="1" size="1" data-vf="firstName" />
                     </label>
                     <label>
                       <span>Last name</span>
-                      <input name="lastName" autocomplete="family-name" required data-vf="lastName" />
+                      <input name="lastName" autocomplete="family-name" required maxlength="80" data-vf="lastName" />
                     </label>
                   </div>
                   <label>
                     <span>Email</span>
-                    <input name="email" type="email" autocomplete="email" required data-vf="email" value="{{ viewerEmail or '' }}" />
+                    <input name="email" type="email" autocomplete="email" required maxlength="120" data-vf="email" value="{{ viewerEmail or '' }}" />
                   </label>
                   <div class="actions">
                     <button class="btn primary" type="submit">Confirm Signup</button>

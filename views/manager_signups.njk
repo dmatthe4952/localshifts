@@ -47,17 +47,17 @@
               <input type="hidden" name="shiftId" value="{{ shift.id }}" />
               <div class="grid2">
                 <label>
-                  <span>First name</span>
-                  <input name="firstName" required />
+                  <span>First name <span class="muted">(aliases allowed)</span></span>
+                  <input name="firstName" required minlength="1" maxlength="1" size="1" />
                 </label>
                 <label>
                   <span>Last name</span>
-                  <input name="lastName" required />
+                  <input name="lastName" required maxlength="80" />
                 </label>
               </div>
               <label>
                 <span>Email</span>
-                <input name="email" type="email" required />
+                <input name="email" type="email" required maxlength="120" />
               </label>
               <div class="actions">
                 <button class="btn primary" type="submit">Add</button>

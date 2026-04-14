@@ -1,8 +1,7 @@
 import crypto from 'node:crypto';
 import { Kysely, sql } from 'kysely';
 import { config } from './config.js';
-import type { DB, EventCategory } from './db.js';
-import { toBadgeFromRow } from './event_categories.js';
+import type { DB } from './db.js';
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -126,19 +125,31 @@ function endOfDayPlusDaysUtc(date: Date, days: number): Date {
 }
 
 export async function listPublicEvents(db: Kysely<DB>) {
-  return listPublicEventsFiltered(db, null);
+  return listPublicEventsFiltered(db, { tag: null });
 }
 
-export async function listPublicEventsFiltered(db: Kysely<DB>, category: EventCategory | null) {
+export async function listPublicEventTags(db: Kysely<DB>) {
+  const res = await sql<{ tag: string }>`
+    select distinct unnest(e.tags) as tag
+    from events e
+    where e.is_published = true
+      and e.is_archived = false
+    order by tag asc
+  `.execute(db);
+  return res.rows
+    .map((r) => String(r.tag ?? '').trim())
+    .filter(Boolean);
+}
+
+export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: string | null }) {
   let q = db
     .selectFrom('events')
     .innerJoin('organizations', 'organizations.id', 'events.organization_id')
-    .leftJoin('event_categories', 'event_categories.slug', 'events.category')
     .where('events.is_published', '=', true)
     .where('events.is_archived', '=', false);
 
-  if (category) {
-    q = q.where('events.category', '=', category);
+  if (params.tag) {
+    q = q.where(sql<boolean>`events.tags @> ARRAY[${params.tag}]::text[]`);
   }
 
   const rows = await q
@@ -146,9 +157,8 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, category: EventCa
       'events.id',
       'events.slug',
       'events.title',
-      'events.category',
-      'event_categories.label as category_label',
-      'event_categories.color as category_color',
+      'events.is_featured',
+      'events.tags',
       'events.start_date',
       'events.end_date',
       'events.location_name',
@@ -230,11 +240,8 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, category: EventCa
       slug: r.slug,
       url: eventUrl(r.slug, r.id),
       title: r.title,
-      category: toBadgeFromRow({
-        slug: ((r as any).category ?? 'normal') as string,
-        label: (r as any).category_label ?? null,
-        color: (r as any).category_color ?? null
-      }),
+      isFeatured: Boolean((r as any).is_featured),
+      tags: Array.isArray((r as any).tags) ? ((r as any).tags as string[]).filter(Boolean) : [],
       organizationName: r.organization_name,
       dateRange,
       timeLabel,
@@ -387,7 +394,7 @@ export async function createSignup(params: {
   const lastName = params.lastName.trim();
   const email = params.email.trim();
 
-  if (!firstName || firstName.length > 80) throw new Error('Please enter a valid first name.');
+  if (firstName.length !== 1) throw new Error('Please enter a valid first name (1 character; aliases allowed).');
   if (!lastName || lastName.length > 80) throw new Error('Please enter a valid last name.');
   if (!email || email.length > 120 || !isValidEmail(email)) throw new Error('Please enter a valid email address.');
 

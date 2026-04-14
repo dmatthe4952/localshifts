@@ -1,6 +1,12 @@
 {% extends "layout.njk" %}
 {% block content %}
   <h1>Admin Dashboard</h1>
+  {% if error %}
+    <div class="flash err"><div>{{ error }}</div></div>
+  {% endif %}
+  {% if ok %}
+    <div class="flash ok"><div>{{ ok }}</div></div>
+  {% endif %}
   <div class="grid">
     <div class="panel">
       <div class="label">Events</div>
@@ -22,5 +28,18 @@
       <a class="btn" href="/admin/organizations">Organizations</a>
       <a class="btn" href="/admin/events">Events</a>
     </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="title">Impersonate manager</div>
+    <form class="form" method="post" action="/admin/impersonate" style="margin-top:10px">
+      <label>
+        <span>Manager name or email</span>
+        <input name="query" required maxlength="120" placeholder="e.g. Alex Smith or alex@example.com" />
+      </label>
+      <div class="actions">
+        <button class="btn primary" type="submit">Go to Manager Dashboard</button>
+      </div>
+    </form>
   </div>
 {% endblock %}

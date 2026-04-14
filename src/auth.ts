@@ -42,6 +42,12 @@ export type CurrentUser = {
   email: string;
   displayName: string;
   role: UserRole;
+  impersonator?: {
+    id: string;
+    email: string;
+    displayName: string;
+    role: UserRole;
+  };
 };
 
 export async function findUserByEmail(db: Kysely<DB>, email: string) {
@@ -110,7 +116,15 @@ export async function loadCurrentUserFromSession(db: Kysely<DB>, sessionId: stri
   const row = await db
     .selectFrom('sessions')
     .innerJoin('users', 'users.id', 'sessions.user_id')
-    .select(['users.id as user_id', 'users.email', 'users.display_name', 'users.role', 'users.is_active', 'sessions.expires_at'])
+    .select([
+      'users.id as user_id',
+      'users.email',
+      'users.display_name',
+      'users.role',
+      'users.is_active',
+      'sessions.expires_at',
+      'sessions.data'
+    ])
     .where('sessions.id', '=', sessionId)
     .executeTakeFirst();
 
@@ -118,7 +132,28 @@ export async function loadCurrentUserFromSession(db: Kysely<DB>, sessionId: stri
   if (!row.is_active) return null;
   if (Date.parse(row.expires_at) < Date.now()) return null;
 
-  return { id: row.user_id, email: row.email, displayName: row.display_name, role: row.role };
+  const baseUser: CurrentUser = { id: row.user_id, email: row.email, displayName: row.display_name, role: row.role };
+
+  const data = row.data as any;
+  const impersonateUserId = typeof data?.impersonate_user_id === 'string' ? data.impersonate_user_id : '';
+  if (!impersonateUserId) return baseUser;
+  if (baseUser.role !== 'super_admin') return baseUser;
+
+  const imp = await db
+    .selectFrom('users')
+    .select(['id', 'email', 'display_name', 'role', 'is_active'])
+    .where('id', '=', impersonateUserId)
+    .where('role', '=', 'event_manager')
+    .executeTakeFirst();
+  if (!imp || !imp.is_active) return baseUser;
+
+  return {
+    id: imp.id,
+    email: imp.email,
+    displayName: imp.display_name,
+    role: imp.role,
+    impersonator: baseUser
+  };
 }
 
 export async function deleteSession(db: Kysely<DB>, sessionId: string) {
