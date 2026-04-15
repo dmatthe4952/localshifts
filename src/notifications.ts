@@ -1,5 +1,5 @@
 import type { Kysely } from 'kysely';
-import { sql } from 'keysely';
+import { sql } from 'kysely';
 import { config } from './config.js';
 import type { DB } from './db.js';
 import { sendEmail } from './email.js';
