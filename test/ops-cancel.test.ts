@@ -41,7 +41,7 @@ describe.skipIf(!DATABASE_URL)('ops cancellation', () => {
     await app.inject({
       method: 'POST',
       url: `/events/${eventSlug}/shifts/${shiftId}/signup`,
-      payload: { firstName: 'A', lastName: 'Lovelace', email: 'ada@example.com' }
+      payload: { firstName: 'Ada', lastName: 'L', email: 'ada@example.com' }
     });
 
     const resCancel = await app.inject({
@@ -63,7 +63,7 @@ describe.skipIf(!DATABASE_URL)('ops cancellation', () => {
     const resSignup2 = await app.inject({
       method: 'POST',
       url: `/events/${eventSlug}/shifts/${shiftId}/signup`,
-      payload: { firstName: 'G', lastName: 'Hopper', email: 'grace@example.com' }
+      payload: { firstName: 'Grace', lastName: 'H', email: 'grace@example.com' }
     });
     expect(resSignup2.statusCode).toBe(303);
     expect(String(resSignup2.headers.location)).toContain('err=');

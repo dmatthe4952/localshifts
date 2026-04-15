@@ -13,6 +13,8 @@
     "migrate": "node scripts/run.mjs migrate",
     "seed": "node scripts/run.mjs seed",
     "set-password": "node scripts/run.mjs set-password",
+    "archive-events": "node scripts/run.mjs archive-events",
+    "send-reminders": "node scripts/run.mjs send-reminders",
     "test": "vitest run",
     "test:templates": "node scripts/compile-templates.mjs",
     "test:templates:vitest": "vitest run test/nunjucks-compile.test.ts",

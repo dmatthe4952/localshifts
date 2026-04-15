@@ -123,7 +123,7 @@ describe.skipIf(!DATABASE_URL)('manager roster', () => {
       method: 'POST',
       url: `/manager/events/${eventId}/signups/add`,
       headers: { cookie: mgrCookie, 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ shiftId, firstName: 'A', lastName: 'Lovelace', email: 'ada@example.com' })
+      payload: formEncode({ shiftId, firstName: 'Ada', lastName: 'L', email: 'ada@example.com' })
     });
     expect(addRes.statusCode).toBe(303);
 

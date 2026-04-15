@@ -394,8 +394,8 @@ export async function createSignup(params: {
   const lastName = params.lastName.trim();
   const email = params.email.trim();
 
-  if (firstName.length !== 1) throw new Error('Please enter a valid first name (1 character; aliases allowed).');
-  if (!lastName || lastName.length > 80) throw new Error('Please enter a valid last name.');
+  if (!firstName || firstName.length > 80) throw new Error('Please enter a valid first name (aliases allowed).');
+  if (lastName.length !== 1) throw new Error('Please enter a valid last name initial (1 character).');
   if (!email || email.length > 120 || !isValidEmail(email)) throw new Error('Please enter a valid email address.');
 
   const rawToken = crypto.randomBytes(32).toString('hex');

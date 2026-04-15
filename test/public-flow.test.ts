@@ -41,7 +41,7 @@ describe.skipIf(!DATABASE_URL)('public volunteer flows', () => {
     const resSignup = await app.inject({
       method: 'POST',
       url: `/events/${eventSlug}/shifts/${shiftId}/signup`,
-      payload: { firstName: 'A', lastName: 'Lovelace', email: 'ada@example.com' }
+      payload: { firstName: 'Ada', lastName: 'L', email: 'ada@example.com' }
     });
     expect(resSignup.statusCode).toBe(303);
     const setCookieHeader = resSignup.headers['set-cookie'];
@@ -70,7 +70,7 @@ describe.skipIf(!DATABASE_URL)('public volunteer flows', () => {
     await app.inject({
       method: 'POST',
       url: `/events/${eventSlug}/shifts/${shiftId}/signup`,
-      payload: { firstName: 'A', lastName: 'Lovelace', email: 'ada@example.com' }
+      payload: { firstName: 'Ada', lastName: 'L', email: 'ada@example.com' }
     });
 
     const resReq = await app.inject({
@@ -98,7 +98,7 @@ describe.skipIf(!DATABASE_URL)('public volunteer flows', () => {
     const resSignup = await app.inject({
       method: 'POST',
       url: `/events/${eventSlug}/shifts/${shiftId}/signup`,
-      payload: { firstName: 'A', lastName: 'Lovelace', email: 'ada@example.com' }
+      payload: { firstName: 'Ada', lastName: 'L', email: 'ada@example.com' }
     });
     const setCookieHeader = resSignup.headers['set-cookie'];
     const setCookie = (Array.isArray(setCookieHeader) ? setCookieHeader[0] : String(setCookieHeader ?? '')).split(';')[0];

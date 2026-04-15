@@ -11,9 +11,9 @@ const appEnv = process.env.APP_ENV || 'development';
 const cmd = process.argv[2];
 const args = process.argv.slice(3);
 
-if (!cmd || !['migrate', 'seed', 'set-password'].includes(cmd)) {
+if (!cmd || !['migrate', 'seed', 'set-password', 'archive-events', 'send-reminders'].includes(cmd)) {
   // eslint-disable-next-line no-console
-  console.error('Usage: node scripts/run.mjs <migrate|seed|set-password> [args...]');
+  console.error('Usage: node scripts/run.mjs <migrate|seed|set-password|archive-events|send-reminders> [args...]');
   process.exit(2);
 }
 
@@ -34,7 +34,9 @@ function runTs() {
   const scriptMap = {
     migrate: 'migrate.ts',
     seed: 'seed.ts',
-    'set-password': 'set_password.ts'
+    'set-password': 'set_password.ts',
+    'archive-events': 'archive_events.ts',
+    'send-reminders': 'send_reminders.ts'
   };
   const target = path.join(projectRoot, 'scripts', scriptMap[cmd]);
   const child = spawn(process.execPath, ['--import', 'tsx', target, ...args], { stdio: 'inherit' });
@@ -48,4 +50,3 @@ if ((appEnv === 'development' || appEnv === 'test') && hasSrcTree()) {
 } else {
   await runDist();
 }
-

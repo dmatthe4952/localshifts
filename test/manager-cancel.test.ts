@@ -128,7 +128,7 @@ describe.skipIf(!DATABASE_URL)('manager cancel event', () => {
     const signupRes = await app.inject({
       method: 'POST',
       url: `/events/${eventId}/shifts/${shiftId}/signup`,
-      payload: { firstName: 'A', lastName: 'Lovelace', email: 'ada@example.com' }
+      payload: { firstName: 'Ada', lastName: 'L', email: 'ada@example.com' }
     });
     expect(signupRes.statusCode).toBe(303);
 
@@ -152,7 +152,7 @@ describe.skipIf(!DATABASE_URL)('manager cancel event', () => {
     const signupRes2 = await app.inject({
       method: 'POST',
       url: `/events/${eventId}/shifts/${shiftId}/signup`,
-      payload: { firstName: 'G', lastName: 'Hopper', email: 'grace@example.com' }
+      payload: { firstName: 'Grace', lastName: 'H', email: 'grace@example.com' }
     });
     expect(signupRes2.statusCode).toBe(303);
     expect(String(signupRes2.headers.location)).toContain('err=');

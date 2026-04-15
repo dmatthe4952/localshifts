@@ -134,13 +134,13 @@ describe.skipIf(!DATABASE_URL)('public concurrency', () => {
         method: 'POST',
         url: signupUrl,
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        payload: formEncode({ firstName: 'A', lastName: 'One', email: 'alice@example.com' })
+        payload: formEncode({ firstName: 'Alice', lastName: 'O', email: 'alice@example.com' })
       }),
       app.inject({
         method: 'POST',
         url: signupUrl,
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        payload: formEncode({ firstName: 'B', lastName: 'Two', email: 'bob@example.com' })
+        payload: formEncode({ firstName: 'Bob', lastName: 'T', email: 'bob@example.com' })
       })
     ]);
 

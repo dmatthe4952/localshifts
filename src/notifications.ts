@@ -93,6 +93,128 @@ async function sendAndRecord(params: {
   }
 }
 
+export async function sendUpcomingShiftReminders(params: {
+  db: Kysely<DB>;
+  offsetHours: number;
+  dryRun?: boolean;
+  limit?: number;
+}) {
+  const offsetHours = Math.floor(Number(params.offsetHours));
+  if (!Number.isFinite(offsetHours) || offsetHours < 0 || offsetHours > 24 * 14) {
+    throw new Error('Invalid offsetHours (must be between 0 and 336).');
+  }
+
+  const limit = Math.floor(Number(params.limit ?? 500));
+  if (!Number.isFinite(limit) || limit < 1 || limit > 5000) throw new Error('Invalid limit.');
+
+  const kind = `shift_reminder_${offsetHours}h`;
+  const tz = config.timezone;
+
+  const rows = await params.db
+    .selectFrom('signups')
+    .innerJoin('shifts', 'shifts.id', 'signups.shift_id')
+    .innerJoin('events', 'events.id', 'shifts.event_id')
+    .innerJoin('organizations', 'organizations.id', 'events.organization_id')
+    .select([
+      'signups.id as signup_id',
+      'signups.first_name',
+      'signups.email',
+      'signups.cancel_token',
+      'events.id as event_id',
+      'events.title as event_title',
+      'events.slug as event_slug',
+      'organizations.name as organization_name',
+      'shifts.role_name',
+      'shifts.shift_date',
+      'shifts.start_time',
+      'shifts.end_time',
+      'events.location_name',
+      'events.location_map_url'
+    ])
+    .where('signups.status', '=', 'active')
+    .where('shifts.is_active', '=', true)
+    .where('events.is_published', '=', true)
+    .where('events.is_archived', '=', false)
+    .where('events.cancelled_at', 'is', null)
+    .where(
+      sql<boolean>`
+        (
+          (shifts.shift_date::timestamp + shifts.start_time) at time zone ${tz}
+        ) > now()
+        and
+        (
+          (shifts.shift_date::timestamp + shifts.start_time) at time zone ${tz}
+        ) <= now() + (${offsetHours} * interval '1 hour')
+      `
+    )
+    .orderBy('shifts.shift_date', 'asc')
+    .orderBy('shifts.start_time', 'asc')
+    .limit(limit)
+    .execute();
+
+  let queued = 0;
+  let skipped = 0;
+  for (const row of rows as any[]) {
+    const eventUrl = `${config.appUrl}/events/${encodeURIComponent(row.event_slug ?? row.event_id)}`;
+    const when = `${formatDateOnly(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`;
+    const cancelUrl = row.cancel_token ? `${config.appUrl}/cancel/${encodeURIComponent(row.cancel_token)}` : '';
+
+    const subject = `Reminder: ${row.event_title} (${when})`;
+    const body = [
+      `Hi ${row.first_name},`,
+      '',
+      `This is a reminder about your upcoming volunteer shift:`,
+      `${row.event_title} (${row.organization_name})`,
+      `Shift: ${row.role_name}`,
+      `When: ${when}`,
+      row.location_name ? `Where: ${row.location_name}` : '',
+      row.location_map_url ? `Directions: ${row.location_map_url}` : '',
+      `Event page: ${eventUrl}`,
+      cancelUrl ? '' : '',
+      cancelUrl ? `Need to cancel? ${cancelUrl}` : '',
+      '',
+      `— VolunteerFlow`
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const html = [
+      `<p>Hi ${escapeHtml(row.first_name)},</p>`,
+      `<p>This is a reminder about your upcoming volunteer shift:</p>`,
+      `<p><strong>${escapeHtml(row.event_title)}</strong> (${escapeHtml(row.organization_name)})<br/>` +
+        `Shift: ${escapeHtml(row.role_name)}<br/>` +
+        `When: ${escapeHtml(when)}<br/>` +
+        (row.location_name ? `Where: ${escapeHtml(row.location_name)}<br/>` : '') +
+        (row.location_map_url ? `<a href="${escapeAttr(row.location_map_url)}">Click for directions</a><br/>` : '') +
+        `<a href="${escapeAttr(eventUrl)}">View event details</a><br/>` +
+        `</p>`,
+      cancelUrl ? `<p><a href="${escapeAttr(cancelUrl)}">Need to cancel? Click here.</a></p>` : '',
+      `<p>— VolunteerFlow</p>`
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    if (params.dryRun) {
+      queued += 1;
+      continue;
+    }
+
+    const res = await sendAndRecord({
+      db: params.db,
+      kind,
+      eventId: row.event_id,
+      signupId: row.signup_id,
+      toEmail: row.email,
+      subject,
+      body,
+      html
+    });
+    if (res.skipped) skipped += 1;
+  }
+
+  return { considered: rows.length, wouldSend: queued, skippedAlreadySent: skipped, kind };
+}
+
 export async function sendSignupConfirmationWithKind(db: Kysely<DB>, signupId: string, kind: string) {
   const row = await db
     .selectFrom('signups')
