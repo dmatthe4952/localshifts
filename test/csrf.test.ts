@@ -52,9 +52,9 @@ describe.skipIf(!DATABASE_URL)('csrf protection', () => {
 
     const adminLogin = await app.inject({
       method: 'POST',
-      url: '/admin/login',
+      url: '/login',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ email: 'admin@example.com', password: 'correct-horse-battery-staple' })
+      payload: formEncode({ email: 'admin@example.com', password: 'correct-horse-battery-staple', role: 'admin' })
     });
     const adminCookie = cookieHeaderFromSetCookie(adminLogin.headers['set-cookie'] as any);
 

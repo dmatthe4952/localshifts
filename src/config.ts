@@ -24,12 +24,23 @@ function envOrDevDefault(name: string, devDefault: string): string {
   throw new Error(`Missing required env var: ${name}`);
 }
 
+function resolveTimezone(): string {
+  const timezone = process.env.APP_TIMEZONE ?? 'America/New_York';
+  try {
+    // Throws for unknown/invalid IANA timezone values.
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+  } catch {
+    throw new Error(`Invalid APP_TIMEZONE: ${timezone}`);
+  }
+  return timezone;
+}
+
 export const config = {
   env,
   port,
   appUrl: envOrDevDefault('APP_URL', `http://localhost:${port}`),
   trustProxy: envBool('TRUST_PROXY') ?? (env === 'staging' || env === 'production'),
-  timezone: process.env.APP_TIMEZONE ?? 'America/New_York',
+  timezone: resolveTimezone(),
   databaseUrl: requireEnv('DATABASE_URL'),
   sessionSecret: requireEnv('SESSION_SECRET'),
   adminToken: process.env.ADMIN_TOKEN ?? '',

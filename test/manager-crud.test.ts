@@ -63,9 +63,9 @@ describe.skipIf(!DATABASE_URL)('manager CRUD', () => {
 
     const adminLogin = await app.inject({
       method: 'POST',
-      url: '/admin/login',
+      url: '/login',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ email: 'admin@example.com', password: 'correct-horse-battery-staple' })
+      payload: formEncode({ email: 'admin@example.com', password: 'correct-horse-battery-staple', role: 'admin' })
     });
     const adminCookieHeader = adminLogin.headers['set-cookie'];
     const adminCookie = cookieHeaderFromSetCookie(adminCookieHeader as any);
@@ -111,9 +111,9 @@ describe.skipIf(!DATABASE_URL)('manager CRUD', () => {
     // Login manager
     const mgrLogin = await app.inject({
       method: 'POST',
-      url: '/manager/login',
+      url: '/login',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ email: 'manager@example.com', password: 'correct-horse-battery-staple' })
+      payload: formEncode({ email: 'manager@example.com', password: 'correct-horse-battery-staple', role: 'manager' })
     });
     expect(mgrLogin.statusCode).toBe(303);
     const mgrCookieHeader = mgrLogin.headers['set-cookie'];

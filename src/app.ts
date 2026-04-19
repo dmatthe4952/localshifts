@@ -424,6 +424,25 @@ export async function buildApp(params: {
     return Number.isNaN(d.getTime()) ? String(value) : d.toISOString().slice(0, 10);
   }
 
+  function formatDateTimeInAppTimezone(value: unknown): string {
+    if (!value) return '';
+    const d = value instanceof Date ? value : new Date(String(value));
+    if (Number.isNaN(d.getTime())) return String(value ?? '');
+    try {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: config.timezone,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      }).format(d);
+    } catch {
+      return d.toISOString();
+    }
+  }
+
   function parseTagsInput(raw: string): string[] {
     const normalizeTag = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
     const parts = String(raw ?? '')
@@ -479,7 +498,7 @@ export async function buildApp(params: {
   });
 
   app.get('/sign-in', async (_req, reply) => {
-    return render(reply, 'sign_in.njk', {});
+    return reply.code(303).redirect('/login');
   });
 
   app.get('/forgot-password', async (req, reply) => {
@@ -812,108 +831,100 @@ export async function buildApp(params: {
       const displayName = String(body.displayName ?? '');
       const password = String(body.password ?? '');
       await createUser(params.db, { email, displayName, password, role: 'super_admin' });
-      return reply.code(303).redirect('/admin/login');
+      return reply.code(303).redirect('/login?role=admin');
     } catch (err: any) {
       return render(reply, 'admin_setup.njk', { error: String(err?.message ?? err) });
     }
   });
 
-  app.get('/admin/login', async (req, reply) => {
+  function parseLoginRole(raw: unknown): 'super_admin' | 'event_manager' {
+    const role = String(raw ?? '').trim().toLowerCase();
+    return role === 'admin' ? 'super_admin' : 'event_manager';
+  }
+
+  function loginRoleHint(role: 'super_admin' | 'event_manager'): 'admin' | 'manager' {
+    return role === 'super_admin' ? 'admin' : 'manager';
+  }
+
+  function dashboardByRole(role: 'super_admin' | 'event_manager'): string {
+    return role === 'super_admin' ? '/admin/dashboard' : '/manager/dashboard';
+  }
+
+  async function handleLogin(req: any, reply: any, forcedRole?: 'super_admin' | 'event_manager') {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const email = String(body.email ?? '');
+    const password = String(body.password ?? '');
+    const role = forcedRole ?? parseLoginRole(body.role);
+    const roleHint = loginRoleHint(role);
+
+    const user = await authenticateUser(params.db, { email, password, role });
+    if (!user) {
+      await recordLoginAudit(params.db, {
+        email,
+        attemptedRole: role,
+        success: false,
+        ipAddress: req?.ip ?? null,
+        userAgent: typeof req?.headers?.['user-agent'] === 'string' ? req.headers['user-agent'] : null
+      });
+      return render(reply, 'login.njk', { error: 'Invalid email or password.', roleHint });
+    }
+
+    const sess = await createSession(params.db, { userId: user.id, ttlDays: 30 });
+    await recordLoginAudit(params.db, {
+      email: user.email,
+      attemptedRole: role,
+      userId: user.id,
+      success: true,
+      ipAddress: req?.ip ?? null,
+      userAgent: typeof req?.headers?.['user-agent'] === 'string' ? req.headers['user-agent'] : null
+    });
+    reply.setCookie('vf_sess', sess.id, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.env !== 'development',
+      signed: true,
+      maxAge: 60 * 60 * 24 * 30
+    });
+    reply.setCookie('vf_csrf', createCsrfToken(), {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.env !== 'development',
+      signed: true,
+      maxAge: 60 * 60 * 24 * 30
+    });
+    return reply.code(303).redirect(dashboardByRole(role));
+  }
+
+  app.get('/login', async (req, reply) => {
     const user = (req as any).currentUser;
     if (user?.role === 'super_admin') return reply.code(303).redirect('/admin/dashboard');
-    return render(reply, 'admin_login.njk', {});
+    if (user?.role === 'event_manager') return reply.code(303).redirect('/manager/dashboard');
+    const qs = req.query as Record<string, string | undefined>;
+    const roleRaw = String(qs.role ?? '').trim().toLowerCase();
+    const roleHint = roleRaw === 'admin' ? 'admin' : roleRaw === 'manager' ? 'manager' : 'manager';
+    return render(reply, 'login.njk', { roleHint });
+  });
+
+  app.post('/login', async (req, reply) => {
+    return handleLogin(req, reply);
+  });
+
+  app.get('/admin/login', async (_req, reply) => {
+    return reply.code(303).redirect('/login?role=admin');
   });
 
   app.post('/admin/login', async (req, reply) => {
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const email = String(body.email ?? '');
-    const password = String(body.password ?? '');
-    const user = await authenticateUser(params.db, { email, password, role: 'super_admin' });
-    if (!user) {
-      await recordLoginAudit(params.db, {
-        email,
-        attemptedRole: 'super_admin',
-        success: false,
-        ipAddress: (req as any).ip ?? null,
-        userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null
-      });
-      return render(reply, 'admin_login.njk', { error: 'Invalid email or password.' });
-    }
-    const sess = await createSession(params.db, { userId: user.id, ttlDays: 30 });
-    await recordLoginAudit(params.db, {
-      email: user.email,
-      attemptedRole: 'super_admin',
-      userId: user.id,
-      success: true,
-      ipAddress: (req as any).ip ?? null,
-      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null
-    });
-    reply.setCookie('vf_sess', sess.id, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.env !== 'development',
-      signed: true,
-      maxAge: 60 * 60 * 24 * 30
-    });
-    reply.setCookie('vf_csrf', createCsrfToken(), {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.env !== 'development',
-      signed: true,
-      maxAge: 60 * 60 * 24 * 30
-    });
-    return reply.code(303).redirect('/admin/dashboard');
+    return handleLogin(req, reply, 'super_admin');
   });
 
-  app.get('/manager/login', async (req, reply) => {
-    const user = (req as any).currentUser;
-    if (user?.role === 'event_manager') return reply.code(303).redirect('/manager/dashboard');
-    return render(reply, 'manager_login.njk', {});
+  app.get('/manager/login', async (_req, reply) => {
+    return reply.code(303).redirect('/login?role=manager');
   });
 
   app.post('/manager/login', async (req, reply) => {
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const email = String(body.email ?? '');
-    const password = String(body.password ?? '');
-    const user = await authenticateUser(params.db, { email, password, role: 'event_manager' });
-    if (!user) {
-      await recordLoginAudit(params.db, {
-        email,
-        attemptedRole: 'event_manager',
-        success: false,
-        ipAddress: (req as any).ip ?? null,
-        userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null
-      });
-      return render(reply, 'manager_login.njk', { error: 'Invalid email or password.' });
-    }
-    const sess = await createSession(params.db, { userId: user.id, ttlDays: 30 });
-    await recordLoginAudit(params.db, {
-      email: user.email,
-      attemptedRole: 'event_manager',
-      userId: user.id,
-      success: true,
-      ipAddress: (req as any).ip ?? null,
-      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null
-    });
-    reply.setCookie('vf_sess', sess.id, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.env !== 'development',
-      signed: true,
-      maxAge: 60 * 60 * 24 * 30
-    });
-    reply.setCookie('vf_csrf', createCsrfToken(), {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: config.env !== 'development',
-      signed: true,
-      maxAge: 60 * 60 * 24 * 30
-    });
-    return reply.code(303).redirect('/manager/dashboard');
+    return handleLogin(req, reply, 'event_manager');
   });
 
   app.post('/logout', async (req, reply) => {
@@ -996,13 +1007,13 @@ export async function buildApp(params: {
         success: Boolean(row.success),
         ipAddress: row.ip_address,
         userAgent: row.user_agent,
-        createdAt: row.created_at,
+        createdAt: formatDateTimeInAppTimezone(row.created_at),
         userDisplayName: row.user_display_name
       })),
       recentImpersonationAudit: recentImpersonationAudit.map((row: any) => ({
         id: row.id,
-        startedAt: row.started_at,
-        endedAt: row.ended_at,
+        startedAt: formatDateTimeInAppTimezone(row.started_at),
+        endedAt: row.ended_at ? formatDateTimeInAppTimezone(row.ended_at) : null,
         ipAddress: row.ip_address,
         userAgent: row.user_agent,
         adminDisplayName: row.admin_display_name,
@@ -1021,11 +1032,11 @@ export async function buildApp(params: {
 
     const sessionCookie = req?.cookies?.vf_sess;
     if (typeof sessionCookie !== 'string' || !sessionCookie) {
-      return reply.code(303).redirect('/admin/login');
+      return reply.code(303).redirect('/login?role=admin');
     }
     const uns = (req as any).unsignCookie(sessionCookie);
     if (!uns?.valid || typeof uns.value !== 'string') {
-      return reply.code(303).redirect('/admin/login');
+      return reply.code(303).redirect('/login?role=admin');
     }
     const sessionId = uns.value;
 
@@ -2582,7 +2593,7 @@ export async function buildApp(params: {
         lastName: s.last_name,
         email: s.email,
         status: s.status,
-        createdAt: toIso(s.created_at)
+        createdAt: formatDateTimeInAppTimezone(s.created_at)
       });
       byShift.set(s.shift_id, list);
     }
