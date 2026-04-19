@@ -10,6 +10,15 @@ function formEncode(values: Record<string, string>) {
     .join('&');
 }
 
+function ymdOffset(days: number): string {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + days));
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 describe.skipIf(!DATABASE_URL)('manager archive', () => {
   let createDb: any;
   let buildApp: any;
@@ -42,6 +51,7 @@ describe.skipIf(!DATABASE_URL)('manager archive', () => {
   });
 
   test('manager can archive and unarchive events', async () => {
+    const eventDate = ymdOffset(7);
     await app.inject({
       method: 'POST',
       url: '/admin/setup',
@@ -98,7 +108,7 @@ describe.skipIf(!DATABASE_URL)('manager archive', () => {
       payload: formEncode({
         title: 'Archived Event',
         organizationId: org.id,
-        date: '2026-04-01',
+        date: eventDate,
         description: 'Hello',
         locationName: 'Somewhere',
         locationMapUrl: 'https://maps.example.com'
@@ -113,7 +123,7 @@ describe.skipIf(!DATABASE_URL)('manager archive', () => {
       headers: { cookie: mgrCookie, 'content-type': 'application/x-www-form-urlencoded' },
       payload: formEncode({
         roleName: 'Packing',
-        shiftDate: '2026-04-01',
+        shiftDate: eventDate,
         roleDescription: '',
         startTime: '10:00',
         durationMinutes: '60',

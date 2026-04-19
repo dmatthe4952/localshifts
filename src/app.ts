@@ -410,8 +410,12 @@ export async function buildApp(params: {
     const tag = showAll ? null : rawTag && allowed.has(rawTag) ? rawTag : null;
 
     const events = await listPublicEventsFiltered(params.db, { tag });
-    const featuredEvents = events.filter((e: any) => e.isFeatured);
-    const otherEvents = events.filter((e: any) => !e.isFeatured);
+    const featuredByRecency = events
+      .filter((e: any) => e.isFeatured)
+      .sort((a: any, b: any) => Number(b.updatedAtEpoch ?? 0) - Number(a.updatedAtEpoch ?? 0));
+    const featuredEvents = featuredByRecency.slice(0, 3);
+    const featuredIds = new Set(featuredEvents.map((e: any) => String(e.id)));
+    const otherEvents = events.filter((e: any) => !featuredIds.has(String(e.id)));
     const showSeedHint = config.env === 'development' || config.env === 'test';
     return render(reply, 'index.njk', { featuredEvents, otherEvents, showSeedHint, navAddEventOnly: true, navTags, tag });
   });
@@ -442,7 +446,17 @@ export async function buildApp(params: {
     return render(reply, 'forgot_password.njk', { role });
   });
 
-  app.post('/add-event', async (req, reply) => {
+  app.post(
+    '/add-event',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 hour'
+        }
+      }
+    },
+    async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const title = String(body.title ?? '').trim();
     const date = String(body.date ?? '').trim();
@@ -510,7 +524,8 @@ export async function buildApp(params: {
         values: { title, date, time, description, organization, organizer }
       });
     }
-  });
+    }
+  );
 
   app.get('/events/:slugOrId', async (req, reply) => {
     const { slugOrId } = req.params as { slugOrId: string };
@@ -618,7 +633,17 @@ export async function buildApp(params: {
     return render(reply, 'my_signups.njk', { viewerEmail, signups, notice });
   });
 
-  app.post('/my/request', async (req, reply) => {
+  app.post(
+    '/my/request',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 hour'
+        }
+      }
+    },
+    async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const email = String(body.email ?? '').trim();
 
@@ -670,7 +695,8 @@ export async function buildApp(params: {
       const msg = err?.message ? String(err.message) : 'Unable to send link.';
       return render(reply, 'my_email_sent.njk', { email, error: msg });
     }
-  });
+    }
+  );
 
   app.get('/my/verify/:token', async (req, reply) => {
     const { token } = req.params as { token: string };
