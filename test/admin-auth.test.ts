@@ -52,9 +52,9 @@ describe.skipIf(!DATABASE_URL)('admin auth', () => {
 
     const loginRes = await app.inject({
       method: 'POST',
-      url: '/admin/login',
+      url: '/login',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ email: 'admin@example.com', password: 'correct-horse-battery-staple' })
+      payload: formEncode({ email: 'admin@example.com', password: 'correct-horse-battery-staple', role: 'admin' })
     });
     expect(loginRes.statusCode).toBe(303);
     const setCookieHeader = loginRes.headers['set-cookie'];
@@ -91,9 +91,9 @@ describe.skipIf(!DATABASE_URL)('admin auth', () => {
 
     const loginRes = await app.inject({
       method: 'POST',
-      url: '/manager/login',
+      url: '/login',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: formEncode({ email: 'admin@example.com', password: 'wrong-password' })
+      payload: formEncode({ email: 'admin@example.com', password: 'wrong-password', role: 'manager' })
     });
     expect(loginRes.statusCode).toBe(200);
     expect(loginRes.body).toContain('Invalid email or password.');
