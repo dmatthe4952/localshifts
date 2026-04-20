@@ -11,9 +11,9 @@ const appEnv = process.env.APP_ENV || 'development';
 const cmd = process.argv[2];
 const args = process.argv.slice(3);
 
-if (!cmd || !['migrate', 'seed', 'set-password', 'archive-events', 'send-reminders'].includes(cmd)) {
+if (!cmd || !['migrate', 'seed', 'set-password', 'archive-events', 'send-reminders', 'geocode-events'].includes(cmd)) {
   // eslint-disable-next-line no-console
-  console.error('Usage: node scripts/run.mjs <migrate|seed|set-password|archive-events|send-reminders> [args...]');
+  console.error('Usage: node scripts/run.mjs <migrate|seed|set-password|archive-events|send-reminders|geocode-events> [args...]');
   process.exit(2);
 }
 
@@ -36,7 +36,8 @@ function runTs() {
     seed: 'seed.ts',
     'set-password': 'set_password.ts',
     'archive-events': 'archive_events.ts',
-    'send-reminders': 'send_reminders.ts'
+    'send-reminders': 'send_reminders.ts',
+    'geocode-events': 'geocode_events.ts'
   };
   const target = path.join(projectRoot, 'scripts', scriptMap[cmd]);
   const child = spawn(process.execPath, ['--import', 'tsx', target, ...args], { stdio: 'inherit' });

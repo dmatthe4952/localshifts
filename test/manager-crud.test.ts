@@ -133,7 +133,7 @@ describe.skipIf(!DATABASE_URL)('manager CRUD', () => {
         date: eventDate,
         description: 'Hello',
         locationName: 'Somewhere',
-        locationMapUrl: 'https://maps.example.com',
+        locationMapUrl: 'https://www.google.com/maps/@34.852600,-82.394000,15z',
         csrfToken: managerCsrfToken
       })
     });
@@ -174,8 +174,14 @@ describe.skipIf(!DATABASE_URL)('manager CRUD', () => {
     expect(publicList.body).toContain('My Test Event');
 
     // Event is published
-    const row = await db.selectFrom('events').select(['is_published']).where('id', '=', eventId).executeTakeFirstOrThrow();
+    const row = await db
+      .selectFrom('events')
+      .select(['is_published', 'location_lat', 'location_lng'])
+      .where('id', '=', eventId)
+      .executeTakeFirstOrThrow();
     expect(row.is_published).toBe(true);
+    expect(Number(row.location_lat)).toBeCloseTo(34.8526, 4);
+    expect(Number(row.location_lng)).toBeCloseTo(-82.394, 4);
 
     // Shift exists
     const count = await db

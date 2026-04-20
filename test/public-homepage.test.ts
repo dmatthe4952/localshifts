@@ -99,6 +99,8 @@ describe.skipIf(!DATABASE_URL)('public homepage listing', () => {
     dayOffset: number;
     updatedAt: string;
     withShift?: boolean;
+    locationLat?: string | null;
+    locationLng?: string | null;
   }) {
     const slug = params.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const date = ymdOffset(params.dayOffset);
@@ -114,6 +116,8 @@ describe.skipIf(!DATABASE_URL)('public homepage listing', () => {
         description_html: '<p>Test event.</p>',
         location_name: 'Somewhere',
         location_map_url: 'https://maps.example.com',
+        location_lat: params.locationLat ?? null,
+        location_lng: params.locationLng ?? null,
         event_type: 'one_time',
         start_date: date,
         end_date: date,
@@ -185,5 +189,51 @@ describe.skipIf(!DATABASE_URL)('public homepage listing', () => {
     expect(body).not.toContain(past);
     expect(body).not.toContain(noShift);
   });
-});
 
+  test('location filter keeps in-radius events first and still shows events with unknown coordinates', async () => {
+    const suffix = crypto.randomBytes(3).toString('hex');
+    const nearby = `Nearby Event ${suffix}`;
+    const unknown = `Unknown Location Event ${suffix}`;
+    const farAway = `Far Event ${suffix}`;
+
+    // Approx Midtown Manhattan
+    await createEvent({
+      title: nearby,
+      isFeatured: false,
+      dayOffset: 8,
+      updatedAt: '2026-04-10T10:00:00.000Z',
+      locationLat: '40.7500',
+      locationLng: '-73.9970'
+    });
+    // Unknown geocode should still be shown
+    await createEvent({
+      title: unknown,
+      isFeatured: false,
+      dayOffset: 8,
+      updatedAt: '2026-04-10T10:00:00.000Z',
+      locationLat: null,
+      locationLng: null
+    });
+    // San Francisco-ish, should be filtered out for 20-mile NYC radius
+    await createEvent({
+      title: farAway,
+      isFeatured: false,
+      dayOffset: 8,
+      updatedAt: '2026-04-10T10:00:00.000Z',
+      locationLat: '37.7749',
+      locationLng: '-122.4194'
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/?lat=40.7505&lng=-73.9965&radius=20' });
+    expect(res.statusCode).toBe(200);
+
+    const body = String(res.body);
+    expect(body).toContain(nearby);
+    expect(body).toContain(unknown);
+    expect(body).not.toContain(farAway);
+
+    // Unknown-location events should sort below in-radius events.
+    expect(body.indexOf(nearby)).toBeGreaterThan(0);
+    expect(body.indexOf(unknown)).toBeGreaterThan(body.indexOf(nearby));
+  });
+});
