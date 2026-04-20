@@ -4,6 +4,45 @@
     <h1>Make a Difference</h1>
     <p class="half-back">Sign up for a shift -- no account required.</p>
   </div>
+  <div class="panel" style="margin-bottom:12px">
+    {% if locationContext and locationContext.hasActiveFilter %}
+      <p class="muted" style="margin:0 0 10px">
+        Showing events near {{ locationContext.label or 'your area' }}
+        {% if locationContext.radiusMiles == null %}
+          (all distances)
+        {% else %}
+          (within {{ locationContext.radiusMiles }} miles)
+        {% endif %}
+        — <a href="/?loc=clear{% if tag %}&tag={{ tag | urlencode }}{% endif %}">change location</a>
+      </p>
+    {% endif %}
+    <form class="form" method="get" action="/">
+      {% if tag %}
+        <input type="hidden" name="tag" value="{{ tag }}" />
+      {% endif %}
+      <div class="grid2">
+        <label>
+          <span>ZIP code</span>
+          <input name="zip" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" placeholder="e.g. 10001" value="{{ (locationContext and locationContext.zip) or '' }}" />
+        </label>
+        <label>
+          <span>Radius</span>
+          <select name="radius">
+            {% set selectedRadius = (locationContext and locationContext.radiusMiles) %}
+            <option value="5" {% if selectedRadius == 5 %}selected{% endif %}>5 miles</option>
+            <option value="10" {% if selectedRadius == 10 %}selected{% endif %}>10 miles</option>
+            <option value="20" {% if selectedRadius == 20 %}selected{% endif %}>20 miles</option>
+            <option value="50" {% if selectedRadius == 50 %}selected{% endif %}>50 miles</option>
+            <option value="all" {% if selectedRadius == null %}selected{% endif %}>Show all</option>
+          </select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Apply Location</button>
+        <button class="btn" id="use-my-location" type="button">Use My Current Location</button>
+      </div>
+    </form>
+  </div>
   <h3>Upcoming Volunteer Opportunities</h3>
   {% if pastEventsEnabled %}
     <p class="muted" style="margin-top:-6px"><a href="/events/past">Browse past events</a></p>
@@ -29,6 +68,9 @@
               <div class="card-meta">
                 <div class="card-date">{{ event.dateRange }}</div>
                 <div class="right" style="gap:6px; flex-wrap:wrap; justify-content:flex-end">
+                  {% if event.distanceMiles != null %}
+                    <span class="badge">{{ event.distanceMiles }} mi</span>
+                  {% endif %}
                   <span class="badge featured">Featured</span>
                   {% for t in event.tags %}
                     <span class="badge tag">{{ t }}</span>
@@ -69,6 +111,9 @@
               <div class="card-meta">
                 <div class="card-date">{{ event.dateRange }}</div>
                 <div class="right" style="gap:6px; flex-wrap:wrap; justify-content:flex-end">
+                  {% if event.distanceMiles != null %}
+                    <span class="badge">{{ event.distanceMiles }} mi</span>
+                  {% endif %}
                   {% for t in event.tags %}
                     <span class="badge tag">{{ t }}</span>
                   {% endfor %}
@@ -95,4 +140,29 @@
       </div>
     {% endif %}
   {% endif %}
+  <script>
+    (function () {
+      var btn = document.getElementById('use-my-location');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        if (!navigator.geolocation) return;
+        btn.disabled = true;
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            var params = new URLSearchParams(window.location.search);
+            params.set('lat', String(pos.coords.latitude));
+            params.set('lng', String(pos.coords.longitude));
+            if (!params.get('radius')) params.set('radius', '20');
+            params.delete('zip');
+            params.delete('loc');
+            window.location.href = '/?' + params.toString();
+          },
+          function () {
+            btn.disabled = false;
+          },
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+        );
+      });
+    })();
+  </script>
 {% endblock %}

@@ -125,7 +125,12 @@ function endOfDayPlusDaysUtc(date: Date, days: number): Date {
 }
 
 export async function listPublicEvents(db: Kysely<DB>) {
-  return listPublicEventsFiltered(db, { tag: null });
+  return listPublicEventsFiltered(db, {
+    tag: null,
+    originLat: null,
+    originLng: null,
+    radiusMiles: null
+  });
 }
 
 export async function listPublicEventTags(db: Kysely<DB>) {
@@ -143,8 +148,42 @@ export async function listPublicEventTags(db: Kysely<DB>) {
     .filter(Boolean);
 }
 
-export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: string | null }) {
+export async function listPublicEventsFiltered(
+  db: Kysely<DB>,
+  params: { tag: string | null; originLat: number | null; originLng: number | null; radiusMiles: number | null }
+) {
   const nowLocal = sql`timezone(${config.timezone}, now())`;
+  const hasOrigin =
+    Number.isFinite(params.originLat as number) &&
+    Number.isFinite(params.originLng as number) &&
+    params.originLat !== null &&
+    params.originLng !== null;
+  const eventHasValidCoordsExpr = sql<boolean>`(
+    events.location_lat is not null
+    and events.location_lng is not null
+    and not (
+      abs(events.location_lat::double precision) < 0.000001
+      and abs(events.location_lng::double precision) < 0.000001
+    )
+  )`;
+  const distanceMilesExpr = hasOrigin
+    ? sql<number | null>`case
+      when ${eventHasValidCoordsExpr} then
+        3959 * acos(
+          least(
+            1,
+            greatest(
+              -1,
+              cos(radians(${params.originLat as number})) * cos(radians(events.location_lat::double precision))
+                * cos(radians(events.location_lng::double precision) - radians(${params.originLng as number}))
+                + sin(radians(${params.originLat as number})) * sin(radians(events.location_lat::double precision))
+            )
+          )
+        )
+      else null
+    end`
+    : sql<number | null>`null`;
+
   let q = db
     .selectFrom('events')
     .innerJoin('organizations', 'organizations.id', 'events.organization_id')
@@ -163,6 +202,15 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: st
       )`
     );
 
+  if (hasOrigin && params.radiusMiles !== null) {
+    q = q.where(
+      sql<boolean>`(
+        not ${eventHasValidCoordsExpr}
+        or ${distanceMilesExpr} <= ${params.radiusMiles}
+      )`
+    );
+  }
+
   if (params.tag) {
     q = q.where(
       sql<boolean>`exists (
@@ -175,7 +223,7 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: st
     );
   }
 
-  const rows = await q
+  q = q
     .select([
       'events.id',
       'events.slug',
@@ -192,9 +240,8 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: st
       'organizations.slug as organization_slug',
       'organizations.primary_color as organization_primary_color'
     ])
-    .select(
-      sql<number>`extract(epoch from events.updated_at)`.as('updated_at_epoch')
-    )
+    .select(sql<number>`extract(epoch from events.updated_at)`.as('updated_at_epoch'))
+    .select(distanceMilesExpr.as('distance_miles'))
     .select(
       sql<string[]>`
         (
@@ -251,12 +298,20 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: st
             and su.status = 'active'
         )
       `.as('filled_slots')
-    )
-    .orderBy('events.start_date', 'asc')
-    .orderBy('events.title', 'asc')
-    .execute();
+    );
+  if (hasOrigin && params.radiusMiles !== null) {
+    q = q
+      .orderBy(sql`case when ${eventHasValidCoordsExpr} then 0 else 1 end`)
+      .orderBy(distanceMilesExpr)
+      .orderBy('events.start_date', 'asc')
+      .orderBy('events.title', 'asc');
+  } else {
+    q = q.orderBy('events.start_date', 'asc').orderBy('events.title', 'asc');
+  }
 
-  return rows.map((r) => {
+  const rows: any[] = await (q as any).execute();
+
+  return rows.map((r: any) => {
     const maxSlots = Number(r.max_slots ?? 0);
     const filledSlots = Number(r.filled_slots ?? 0);
     const openSlots = Math.max(0, maxSlots - filledSlots);
@@ -270,6 +325,11 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: st
 
     const descriptionText = htmlToPlainText(r.description_html);
     const descriptionShort = descriptionText.length > 220 ? `${descriptionText.slice(0, 217)}…` : descriptionText;
+    const distanceMilesRaw = (r as any).distance_miles;
+    const distanceMilesNum =
+      distanceMilesRaw == null || distanceMilesRaw === '' || Number.isNaN(Number(distanceMilesRaw)) ? null : Number(distanceMilesRaw);
+    const distanceMiles =
+      distanceMilesNum == null ? null : Math.round(distanceMilesNum * 10) / 10;
 
     return {
       id: r.id,
@@ -288,6 +348,7 @@ export async function listPublicEventsFiltered(db: Kysely<DB>, params: { tag: st
       cancelledAt: r.cancelled_at,
       updatedAt: r.updated_at,
       updatedAtEpoch: Number((r as any).updated_at_epoch ?? 0),
+      distanceMiles,
       openSlots,
       isFull: openSlots === 0 && maxSlots > 0
     };

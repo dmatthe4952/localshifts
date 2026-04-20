@@ -504,6 +504,240 @@ export async function buildApp(params: {
     return deduped;
   }
 
+  function parseRadiusMiles(raw: unknown): number | null {
+    const v = String(raw ?? '').trim().toLowerCase();
+    if (!v || v === 'all' || v === 'show-all') return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 20;
+    if (n <= 0) return 20;
+    if (n > 200) return 200;
+    return Math.round(n);
+  }
+
+  function parseCoord(raw: unknown): number | null {
+    const s = String(raw ?? '').trim();
+    if (!s) return null;
+    const n = Number(s);
+    if (!Number.isFinite(n)) return null;
+    return n;
+  }
+
+  function isInvalidCoordPair(lat: number, lng: number): boolean {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return true;
+    // Defensive guard: old bad cookie state could persist as (0,0).
+    if (Math.abs(lat) < 0.000001 && Math.abs(lng) < 0.000001) return true;
+    return false;
+  }
+
+  function parseZip(raw: unknown): string | null {
+    const v = String(raw ?? '').trim();
+    const m = v.match(/^\d{5}$/);
+    return m ? m[0] : null;
+  }
+
+  type PublicLocationCookie = {
+    mode: 'zip' | 'geo' | 'ip';
+    lat: number;
+    lng: number;
+    radiusMiles: number | null;
+    zip?: string;
+    label?: string;
+  };
+
+  function parsePublicLocationCookie(raw: string | null): PublicLocationCookie | null {
+    if (!raw) return null;
+    try {
+      const v = JSON.parse(raw) as PublicLocationCookie;
+      if (!v || (v.mode !== 'zip' && v.mode !== 'geo' && v.mode !== 'ip')) return null;
+      if (isInvalidCoordPair(v.lat, v.lng)) return null;
+      return {
+        ...v,
+        radiusMiles:
+          v.radiusMiles == null
+            ? null
+            : Number.isFinite(Number(v.radiusMiles))
+              ? Math.round(Number(v.radiusMiles))
+              : 20
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function getIpApproxLocationFromHeaders(req: any): { lat: number; lng: number; label: string } | null {
+    const h = req?.headers ?? {};
+    const cityRaw =
+      (typeof h['cf-ipcity'] === 'string' ? h['cf-ipcity'] : '') ||
+      (typeof h['x-vercel-ip-city'] === 'string' ? h['x-vercel-ip-city'] : '');
+    const regionRaw =
+      (typeof h['cf-region-code'] === 'string' ? h['cf-region-code'] : '') ||
+      (typeof h['cf-region'] === 'string' ? h['cf-region'] : '') ||
+      (typeof h['x-vercel-ip-country-region'] === 'string' ? h['x-vercel-ip-country-region'] : '');
+    const lat = parseCoord(
+      (typeof h['cf-iplatitude'] === 'string' ? h['cf-iplatitude'] : '') ||
+        (typeof h['x-vercel-ip-latitude'] === 'string' ? h['x-vercel-ip-latitude'] : '')
+    );
+    const lng = parseCoord(
+      (typeof h['cf-iplongitude'] === 'string' ? h['cf-iplongitude'] : '') ||
+        (typeof h['x-vercel-ip-longitude'] === 'string' ? h['x-vercel-ip-longitude'] : '')
+    );
+    if (lat == null || lng == null) return null;
+    if (isInvalidCoordPair(lat, lng)) return null;
+
+    const city = cityRaw.trim();
+    const region = regionRaw.trim();
+    const label = city && region ? `${city}, ${region}` : city || region || 'your area';
+    return { lat, lng, label };
+  }
+
+  async function geocodeUsZip(zip: string): Promise<{ lat: number; lng: number; label: string } | null> {
+    const normalizeZip = (value: unknown): string | null => {
+      const m = String(value ?? '').match(/\b(\d{5})\b/);
+      return m?.[1] ?? null;
+    };
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const url =
+        `https://nominatim.openstreetmap.org/search?` +
+        `postalcode=${encodeURIComponent(zip)}&countrycodes=us&addressdetails=1&format=jsonv2&limit=5`;
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          'User-Agent': 'LocalShifts/0.1 (https://www.trtechapp.com)'
+        }
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as Array<Record<string, unknown>>;
+      const rows = Array.isArray(body) ? body : [];
+      const matched = rows.find((row) => {
+        const addr = row.address as Record<string, unknown> | undefined;
+        const zipFromAddr = normalizeZip(addr?.postcode);
+        const zipFromDisplay = normalizeZip(row.display_name);
+        const returnedZip = zipFromAddr ?? zipFromDisplay;
+        return returnedZip === zip;
+      });
+      if (!matched) return null;
+      const lat = Number(matched.lat);
+      const lng = Number(matched.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      const display = typeof matched.display_name === 'string' ? matched.display_name : '';
+      const firstPart = display.split(',')[0]?.trim() || '';
+      const label = firstPart ? `${firstPart} (${zip})` : `ZIP ${zip}`;
+      return { lat, lng, label };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function parseCoordsFromMapUrl(rawUrl: string | null | undefined): { lat: number; lng: number } | null {
+    const text = String(rawUrl ?? '').trim();
+    if (!text) return null;
+
+    const fromPair = (latRaw: string, lngRaw: string): { lat: number; lng: number } | null => {
+      const lat = Number(latRaw);
+      const lng = Number(lngRaw);
+      if (isInvalidCoordPair(lat, lng)) return null;
+      return { lat, lng };
+    };
+
+    const patterns = [
+      /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i,
+      /[?&](?:q|ll|query)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i
+    ];
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (!m) continue;
+      const parsed = fromPair(m[1] ?? '', m[2] ?? '');
+      if (parsed) return parsed;
+    }
+    return null;
+  }
+
+  async function geocodeLocationName(locationName: string): Promise<{ lat: number; lng: number } | null> {
+    const variants = Array.from(
+      new Set(
+        [
+          locationName,
+          locationName.replace(/\s*,\s*/g, ', '),
+          `${locationName.replace(/\s*,\s*/g, ', ')}, USA`,
+          locationName.replace(/,\s*([A-Z]{2})(\b|$)/, ', $1')
+        ]
+          .map((v) => v.trim())
+          .filter(Boolean)
+      )
+    );
+
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      for (const candidate of variants) {
+        const url =
+          'https://nominatim.openstreetmap.org/search?' +
+          `q=${encodeURIComponent(candidate)}&countrycodes=us&format=jsonv2&limit=1`;
+        const res = await fetch(url, {
+          signal: ctrl.signal,
+          headers: {
+            'User-Agent': 'LocalShifts/0.1 (https://www.trtechapp.com)'
+          }
+        });
+        if (!res.ok) continue;
+        const body = (await res.json()) as Array<Record<string, unknown>>;
+        const first = Array.isArray(body) ? body[0] : null;
+        if (!first) continue;
+        const lat = Number(first.lat);
+        const lng = Number(first.lon);
+        if (isInvalidCoordPair(lat, lng)) continue;
+        return { lat, lng };
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  function isSpecificEnoughAddress(locationNameRaw: string): boolean {
+    const v = String(locationNameRaw ?? '').trim();
+    if (!v) return false;
+    // Accept ZIP-inclusive addresses.
+    if (/\b\d{5}(?:-\d{4})?\b/.test(v)) return true;
+    // Accept common comma-separated formats that include a region/state signal.
+    const parts = v
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length >= 2) {
+      const tail = parts.slice(1).join(' ');
+      // Region token can be two-letter state abbreviation or full state name.
+      if (/\b[A-Za-z]{2}\b/.test(tail)) return true;
+      if (
+        /\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia)\b/i.test(
+          tail
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function resolveEventLocationCoords(locationNameRaw: string, locationMapUrlRaw: string): Promise<{ lat: number; lng: number } | null> {
+    const locationName = String(locationNameRaw ?? '').trim();
+    if (!locationName) return null;
+
+    const fromMapUrl = parseCoordsFromMapUrl(locationMapUrlRaw);
+    if (fromMapUrl) return fromMapUrl;
+
+    if (config.env !== 'test' && !isSpecificEnoughAddress(locationName)) return null;
+    if (config.env === 'test') return null;
+    return geocodeLocationName(locationName);
+  }
+
   app.get('/', async (req, reply) => {
     const qs = req.query as Record<string, string | undefined>;
     const showAll = qs.all === '1';
@@ -512,8 +746,123 @@ export async function buildApp(params: {
     const navTags = navTagsRaw.map((t) => ({ value: t, q: encodeURIComponent(t) }));
     const allowed = new Set(navTagsRaw.map((t) => t.toLowerCase()));
     const tag = showAll ? null : rawTag && allowed.has(rawTag) ? rawTag : null;
+    const clearLocation = String(qs.loc ?? '').trim().toLowerCase() === 'clear';
+    const radiusRaw = String(qs.radius ?? '').trim();
+    const radiusParsed = parseRadiusMiles(qs.radius);
+    const radiusMiles = radiusRaw ? radiusParsed : 20;
+    const zip = parseZip(qs.zip);
+    const qLat = parseCoord(qs.lat);
+    const qLng = parseCoord(qs.lng);
+    const hasCoordQuery = qLat !== null && qLng !== null && !isInvalidCoordPair(qLat, qLng);
 
-    const events = await listPublicEventsFiltered(params.db, { tag });
+    let locationContext: {
+      hasActiveFilter: boolean;
+      label: string | null;
+      radiusMiles: number | null;
+      zip: string;
+    } = { hasActiveFilter: false, label: null, radiusMiles, zip: zip ?? '' };
+    let originLat: number | null = null;
+    let originLng: number | null = null;
+    let locationCookie: PublicLocationCookie | null = null;
+
+    if (clearLocation) {
+      reply.clearCookie('vf_loc', { path: '/', signed: true });
+    } else if (zip) {
+      const geocoded = await geocodeUsZip(zip);
+      if (geocoded) {
+        originLat = geocoded.lat;
+        originLng = geocoded.lng;
+        locationContext = {
+          hasActiveFilter: true,
+          label: geocoded.label,
+          radiusMiles,
+          zip
+        };
+        locationCookie = {
+          mode: 'zip',
+          lat: geocoded.lat,
+          lng: geocoded.lng,
+          radiusMiles,
+          zip,
+          label: geocoded.label
+        };
+      } else {
+        // Avoid sticky stale origin when ZIP lookup fails.
+        reply.clearCookie('vf_loc', { path: '/', signed: true });
+        locationContext = {
+          hasActiveFilter: false,
+          label: null,
+          radiusMiles,
+          zip
+        };
+      }
+    } else if (hasCoordQuery) {
+      originLat = qLat;
+      originLng = qLng;
+      locationContext = {
+        hasActiveFilter: true,
+        label: 'your current location',
+        radiusMiles,
+        zip: ''
+      };
+      locationCookie = {
+        mode: 'geo',
+        lat: qLat,
+        lng: qLng,
+        radiusMiles,
+        label: 'your current location'
+      };
+    } else {
+      const cookieLoc = parsePublicLocationCookie(readSignedCookie(req, 'vf_loc'));
+      if (cookieLoc) {
+        originLat = cookieLoc.lat;
+        originLng = cookieLoc.lng;
+        locationContext = {
+          hasActiveFilter: true,
+          label: cookieLoc.label ?? (cookieLoc.zip ? `ZIP ${cookieLoc.zip}` : 'your saved location'),
+          radiusMiles: cookieLoc.radiusMiles,
+          zip: cookieLoc.zip ?? ''
+        };
+        locationCookie = cookieLoc;
+      } else {
+        const ipLoc = getIpApproxLocationFromHeaders(req);
+        if (ipLoc) {
+          originLat = ipLoc.lat;
+          originLng = ipLoc.lng;
+          locationContext = {
+            hasActiveFilter: true,
+            label: ipLoc.label,
+            radiusMiles: radiusMiles ?? 20,
+            zip: ''
+          };
+          locationCookie = {
+            mode: 'ip',
+            lat: ipLoc.lat,
+            lng: ipLoc.lng,
+            radiusMiles: radiusMiles ?? 20,
+            label: ipLoc.label
+          };
+        }
+      }
+    }
+
+    if (locationCookie && !clearLocation) {
+      reply.setCookie('vf_loc', JSON.stringify(locationCookie), {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: config.env !== 'development',
+        signed: true,
+        maxAge: 60 * 60 * 24 * 30
+      });
+    }
+
+    const events = await listPublicEventsFiltered(params.db, {
+      tag,
+      originLat,
+      originLng,
+      radiusMiles: locationContext.hasActiveFilter ? locationContext.radiusMiles : null
+    });
     const featuredByRecency = events
       .filter((e: any) => e.isFeatured)
       .sort((a: any, b: any) => Number(b.updatedAtEpoch ?? 0) - Number(a.updatedAtEpoch ?? 0));
@@ -529,7 +878,8 @@ export async function buildApp(params: {
       navAddEventOnly: true,
       navTags,
       tag,
-      pastEventsEnabled
+      pastEventsEnabled,
+      locationContext
     });
   });
 
@@ -1948,6 +2298,7 @@ export async function buildApp(params: {
       const startDate = parseDateOnly(date);
       const slug = await uniqueEventSlug(title);
       const category = (isFeatured ? 'featured' : 'normal') as EventCategory;
+      const draftCoords = parseCoordsFromMapUrl(locationMapUrl);
 
       const inserted = await params.db
         .insertInto('events')
@@ -1963,6 +2314,8 @@ export async function buildApp(params: {
           description_html: descriptionTextToHtml(description),
           location_name: locationName || null,
           location_map_url: locationMapUrl || null,
+          location_lat: draftCoords ? draftCoords.lat.toFixed(6) : null,
+          location_lng: draftCoords ? draftCoords.lng.toFixed(6) : null,
           image_path: null,
           event_type: 'one_time',
           recurrence_rule: null,
@@ -2133,10 +2486,11 @@ export async function buildApp(params: {
       const sd = parseDateOnly(startDate);
       const ed = parseDateOnly(endDate);
       const category = (isFeatured ? 'featured' : 'normal') as EventCategory;
+      const draftCoords = parseCoordsFromMapUrl(locationMapUrl);
 
       const existing = await params.db
         .selectFrom('events')
-        .select(['organization_id'])
+        .select(['organization_id', 'location_name', 'location_map_url', 'location_lat', 'location_lng'])
         .where('id', '=', id)
         .where('manager_id', '=', currentUser.id)
         .executeTakeFirst();
@@ -2152,6 +2506,17 @@ export async function buildApp(params: {
         if (!allowedOrg) throw new Error('You are not assigned to that organization.');
       }
 
+      const nextLocationName = locationName || null;
+      const nextLocationMapUrl = locationMapUrl || null;
+      const locationChanged =
+        String(existing.location_name ?? '').trim() !== String(nextLocationName ?? '').trim() ||
+        String(existing.location_map_url ?? '').trim() !== String(nextLocationMapUrl ?? '').trim();
+      const nextCoords = locationChanged
+        ? draftCoords
+          ? { lat: draftCoords.lat.toFixed(6), lng: draftCoords.lng.toFixed(6) }
+          : { lat: null, lng: null }
+        : { lat: existing.location_lat, lng: existing.location_lng };
+
       await params.db
         .updateTable('events')
         .set({
@@ -2164,8 +2529,10 @@ export async function buildApp(params: {
           start_date: sd,
           end_date: ed,
           description_html: descriptionTextToHtml(description),
-          location_name: locationName || null,
-          location_map_url: locationMapUrl || null
+          location_name: nextLocationName,
+          location_map_url: nextLocationMapUrl,
+          location_lat: nextCoords.lat,
+          location_lng: nextCoords.lng
         })
         .where('id', '=', id)
         .where('manager_id', '=', currentUser.id)
@@ -2262,7 +2629,7 @@ export async function buildApp(params: {
     const { id } = req.params as { id: string };
     const ev = await params.db
       .selectFrom('events')
-      .select(['is_archived', 'cancelled_at'])
+      .select(['is_archived', 'cancelled_at', 'location_name', 'location_map_url', 'location_lat', 'location_lng'])
       .where('id', '=', id)
       .where('manager_id', '=', currentUser.id)
       .executeTakeFirst();
@@ -2277,6 +2644,28 @@ export async function buildApp(params: {
       .where('is_active', '=', true)
       .executeTakeFirst();
     if (Number(shifts?.c ?? 0) === 0) return reply.code(303).redirect(`/manager/events/${id}/edit?err=add_shift`);
+
+    const locationName = String(ev.location_name ?? '').trim();
+    const currentLat = ev.location_lat == null ? null : Number(ev.location_lat);
+    const currentLng = ev.location_lng == null ? null : Number(ev.location_lng);
+    const hasValidCoords = currentLat !== null && currentLng !== null && !isInvalidCoordPair(currentLat, currentLng);
+    if (locationName && !hasValidCoords) {
+      const resolved = await resolveEventLocationCoords(locationName, String(ev.location_map_url ?? ''));
+      if (!resolved) {
+        return reply
+          .code(303)
+          .redirect(`/manager/events/${id}/edit?err=${encodeURIComponent("Address couldn't be located. Use a full street address with city/state (or ZIP).")}`);
+      }
+      await params.db
+        .updateTable('events')
+        .set({
+          location_lat: resolved.lat.toFixed(6),
+          location_lng: resolved.lng.toFixed(6)
+        })
+        .where('id', '=', id)
+        .where('manager_id', '=', currentUser.id)
+        .execute();
+    }
 
     await params.db
       .updateTable('events')
