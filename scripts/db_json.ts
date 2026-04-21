@@ -52,6 +52,9 @@ function isObjectLike(value: unknown): value is Record<string, unknown> {
 }
 
 function encodeValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    return { $lsType: 'date', iso: value.toISOString() };
+  }
   if (Buffer.isBuffer(value)) {
     return { $lsType: 'bytea', base64: value.toString('base64') };
   }
@@ -67,6 +70,9 @@ function encodeValue(value: unknown): unknown {
 function decodeValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(decodeValue);
   if (isObjectLike(value)) {
+    if (value.$lsType === 'date' && typeof value.iso === 'string') {
+      return value.iso;
+    }
     if (value.$lsType === 'bytea' && typeof value.base64 === 'string') {
       return Buffer.from(value.base64, 'base64');
     }

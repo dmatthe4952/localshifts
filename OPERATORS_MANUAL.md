@@ -223,6 +223,19 @@ View it:
 1. `tail -f logs/app.log`
 2. Or: `docker compose exec app sh -lc "tail -f /app/logs/app.log"`
 
+### Backup file permanence (staging)
+When running JSON backup commands from inside the app container, backup files are written inside the container at `/app/backups`.
+
+To make a backup file permanent on the host:
+1. Verify files in the container:
+   - `docker compose --env-file .env.staging -f docker-compose.staging.yml exec app ls -la /app/backups`
+2. Copy the folder (or a single file) to host storage:
+   - `docker cp localshifts-staging-app-1:/app/backups ./backups`
+
+Notes:
+- Replace `localshifts-staging-app-1` with your current app container name from `docker compose ... ps`.
+- Container-local files can be lost when containers are recreated unless copied to host storage or a persistent volume.
+
 ### Ops: template compile check
 If a deploy fails with a Nunjucks template parse error (or you want to verify templates on a running container), call:
 - `curl -fsS -H "x-admin-token: $ADMIN_TOKEN" "$APP_URL/ops/templates/compile"`
