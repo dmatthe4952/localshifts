@@ -121,6 +121,13 @@ export async function sendEmail(msg: EmailMessage, options?: { db?: Kysely<DB> }
   const smtp = await resolveSmtpConfig(options?.db);
   const from = fromHeader(smtp);
 
+  // Tests should never attempt external SMTP.
+  if (config.env === 'test') {
+    // eslint-disable-next-line no-console
+    console.log('[email:test]', { to: redactEmail(msg.to), subject: msg.subject, text: msg.text, html: msg.html });
+    return;
+  }
+
   // SMTP (staging/production, or dev if explicitly configured)
   if (smtp.host && smtp.fromEmail) {
     const transporter = nodemailer.createTransport({
