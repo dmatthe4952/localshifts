@@ -179,7 +179,7 @@ export async function sendEmail(msg: EmailMessage, options?: { db?: Kysely<DB> }
   }
 
   // In non-dev environments, missing SMTP config is an error (don't silently "send").
-  if (config.env !== 'development' && config.env !== 'test') {
+  if (config.env !== 'development') {
     throw new Error('Email sending is not configured.');
   }
 

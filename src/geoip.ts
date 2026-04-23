@@ -100,9 +100,9 @@ export function lookupGeoIpFromReader(reader: MaxMindReaderLike, ip: string): Ge
 }
 
 export function createGeoIpLookup(params: { dbPath: string; log?: (line: string, err?: unknown) => void }) {
-  let readerPromise: Promise<maxmind.Reader<any> | null> | null = null;
+  let readerPromise: Promise<MaxMindReaderLike | null> | null = null;
 
-  async function loadReader(): Promise<maxmind.Reader<any> | null> {
+  async function loadReader(): Promise<MaxMindReaderLike | null> {
     const path = String(params.dbPath ?? '').trim();
     if (!path) return null;
     if (!fs.existsSync(path)) return null;
@@ -114,7 +114,7 @@ export function createGeoIpLookup(params: { dbPath: string; log?: (line: string,
     }
   }
 
-  async function getReader(): Promise<maxmind.Reader<any> | null> {
+  async function getReader(): Promise<MaxMindReaderLike | null> {
     if (!readerPromise) readerPromise = loadReader();
     return await readerPromise;
   }
