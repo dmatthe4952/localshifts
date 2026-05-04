@@ -117,6 +117,7 @@ export interface SignupsTable {
   email_norm: Generated<string>;
   status: SignupStatus;
   cancel_token: string | null;
+  cancel_token_hash: string | null;
   cancel_token_hmac: Buffer;
   cancel_token_expires_at: string;
   cancellation_note: string | null;
@@ -152,6 +153,7 @@ export interface VolunteerEmailTokensTable {
   token_hmac: Buffer;
   expires_at: string;
   used_at: string | null;
+  first_used_at: string | null;
   created_at: Generated<string>;
 }
 
@@ -160,6 +162,7 @@ export interface NotificationSendsTable {
   kind: string;
   event_id: string | null;
   signup_id: string | null;
+  reminder_rule_id: string | null;
   to_email: string;
   subject: string;
   body: string;
