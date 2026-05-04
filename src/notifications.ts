@@ -56,6 +56,7 @@ async function sendAndRecord(params: {
   kind: string;
   eventId: string | null;
   signupId: string | null;
+  reminderRuleId?: string | null;
   toEmail: string;
   subject: string;
   body: string;
@@ -67,6 +68,7 @@ async function sendAndRecord(params: {
       kind: params.kind,
       event_id: params.eventId,
       signup_id: params.signupId,
+      reminder_rule_id: params.reminderRuleId ?? null,
       to_email: params.toEmail,
       subject: params.subject,
       body: params.body,
@@ -154,6 +156,7 @@ export async function sendUpcomingShiftReminders(params: {
       'events.location_map_url',
       'users.display_name as manager_name',
       'users.email as manager_email',
+      'reminder_rules.id as reminder_rule_id',
       'reminder_rules.subject_template as reminder_subject_template',
       'reminder_rules.body_template as reminder_body_template'
     ])
@@ -238,6 +241,7 @@ export async function sendUpcomingShiftReminders(params: {
       kind,
       eventId: row.event_id,
       signupId: row.signup_id,
+      reminderRuleId: row.reminder_rule_id,
       toEmail: row.email,
       subject,
       body,

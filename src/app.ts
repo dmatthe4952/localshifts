@@ -1296,7 +1296,7 @@ export async function buildApp(params: {
 
   app.get('/my/verify/:token', async (req, reply) => {
     const { token } = req.params as { token: string };
-    const verified = await verifyMySignupsToken(params.db, token, { consume: false });
+    const verified = await verifyMySignupsToken(params.db, token);
     if (!verified) {
       const asCancel = await findActiveSignupByCancelToken(params.db, token);
       if (asCancel && asCancel.expired === false) return reply.code(303).redirect(`/cancel/${encodeURIComponent(token)}`);

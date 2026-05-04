@@ -613,6 +613,7 @@ export async function createSignup(params: {
   if (!email || email.length > 120 || !isValidEmail(email)) throw new Error('Please enter a valid email address.');
 
   const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   const tokenHmac = crypto.createHmac('sha256', config.sessionSecret).update(rawToken).digest();
 
   const res = await params.db.transaction().execute(async (trx) => {
@@ -662,6 +663,7 @@ export async function createSignup(params: {
           email,
           status: 'active',
           cancel_token: rawToken,
+          cancel_token_hash: tokenHash,
           cancel_token_hmac: tokenHmac,
           cancel_token_expires_at: expiresAt.toISOString()
         })
@@ -684,6 +686,7 @@ export async function createSignup(params: {
 
 export async function findActiveSignupByCancelToken(db: Kysely<DB>, rawToken: string) {
   if (!/^[a-f0-9]{64}$/.test(rawToken)) return null;
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   const tokenHmac = crypto.createHmac('sha256', config.sessionSecret).update(rawToken).digest();
 
   const row = await db
@@ -703,7 +706,7 @@ export async function findActiveSignupByCancelToken(db: Kysely<DB>, rawToken: st
       'shifts.end_time',
       'events.title as event_title'
     ])
-    .where(sql<boolean>`(signups.cancel_token = ${rawToken} or signups.cancel_token_hmac = ${tokenHmac})`)
+    .where(sql<boolean>`(signups.cancel_token = ${rawToken} or signups.cancel_token_hash = ${tokenHash} or signups.cancel_token_hmac = ${tokenHmac})`)
     .executeTakeFirst();
 
   if (!row) return null;
@@ -804,51 +807,35 @@ export async function requestMySignupsToken(db: Kysely<DB>, email: string) {
   return { token: rawToken, expiresAt };
 }
 
-export async function verifyMySignupsToken(db: Kysely<DB>, rawToken: string, opts?: { consume?: boolean }) {
+export async function verifyMySignupsToken(db: Kysely<DB>, rawToken: string) {
   if (!/^[a-f0-9]{64}$/.test(rawToken)) return null;
   const tokenHmac = crypto.createHmac('sha256', config.sessionSecret).update(rawToken).digest();
 
   const now = new Date();
   const nowIso = now.toISOString();
-  const consume = opts?.consume !== false;
-
-  if (!consume) {
-    const row = await db
-      .selectFrom('volunteer_email_tokens')
-      .select(['email', 'expires_at', 'used_at'])
-      .where('token_hmac', '=', tokenHmac)
-      .executeTakeFirst();
-
-    if (!row) return null;
-    if (row.used_at) return { expired: true as const };
-    if (Date.parse(row.expires_at) <= now.getTime()) return { expired: true as const };
-    return { expired: false as const, email: row.email as string };
-  }
-
-  // Consume token on first successful verification.
-  // This makes email links truly one-time (a second request will fail).
-  const consumed = await db
-    .updateTable('volunteer_email_tokens')
-    .set({ used_at: nowIso, expires_at: nowIso })
-    .where('token_hmac', '=', tokenHmac)
-    .where('used_at', 'is', null)
-    .where('expires_at', '>', nowIso)
-    .returning(['email'])
-    .executeTakeFirst();
-
-  if (consumed) return { expired: false as const, email: consumed.email as string };
-
-  // If we didn't consume a row, figure out whether it's missing vs. expired/used.
+  // v2.3 behavior: token remains valid for full TTL and is not invalidated on use.
+  // We still set first_used_at (or legacy used_at) for audit only.
   const row = await db
     .selectFrom('volunteer_email_tokens')
-    .select(['expires_at', 'used_at'])
+    .select(['email', 'expires_at', 'used_at', 'first_used_at'])
     .where('token_hmac', '=', tokenHmac)
     .executeTakeFirst();
 
   if (!row) return null;
-  if (row.used_at) return { expired: true as const };
   if (Date.parse(row.expires_at) <= now.getTime()) return { expired: true as const };
 
-  // Token exists and appears valid, but we couldn't consume it (race or clock skew).
-  return { expired: true as const };
+  const alreadyUsed = Boolean((row as any).first_used_at ?? row.used_at);
+  if (!alreadyUsed) {
+    await db
+      .updateTable('volunteer_email_tokens')
+      .set({
+        first_used_at: nowIso,
+        used_at: nowIso
+      })
+      .where('token_hmac', '=', tokenHmac)
+      .where('first_used_at', 'is', null)
+      .execute();
+  }
+
+  return { expired: false as const, email: row.email as string };
 }
