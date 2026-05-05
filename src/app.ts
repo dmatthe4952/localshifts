@@ -1279,11 +1279,11 @@ export async function buildApp(params: {
           '',
           verifyUrlOneTime,
           '',
-          'This link can be used once and expires in 1 hour.'
+          'This link is valid for 1 hour.'
         ].join('\n'),
         html: [
           '<p><a href="' + verifyUrlOneTime + '">Click to view signups</a></p>',
-          '<p style="color:#666;font-size:14px;margin:0">This link can be used once and expires in 1 hour.</p>'
+          '<p style="color:#666;font-size:14px;margin:0">This link is valid for 1 hour.</p>'
         ].join('\n')
       }, { db: params.db });
 
