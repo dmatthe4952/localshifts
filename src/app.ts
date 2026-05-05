@@ -23,6 +23,7 @@ import {
   listPublicEventOrganizations,
   listPublicEventsFiltered,
   listPastPublicEvents,
+  issueCancelTokenForSignup,
   listViewerActiveSignups,
   requestMySignupsToken,
   verifyMySignupsToken
@@ -1804,7 +1805,6 @@ export async function buildApp(params: {
         'events.slug',
         'events.title',
         'events.start_date',
-        'events.end_date',
         'events.is_published',
         'events.is_archived',
         'events.cancelled_at',
@@ -1820,7 +1820,7 @@ export async function buildApp(params: {
 
     const mapRow = (r: any) => {
       const start = toDateOnly(r.start_date);
-      const end = toDateOnly(r.end_date);
+      const end = toDateOnly(r.start_date);
       return {
         id: r.id,
         title: r.title,
@@ -1960,7 +1960,6 @@ export async function buildApp(params: {
         'events.slug',
         'events.title',
         'events.start_date',
-        'events.end_date',
         'events.is_published',
         'events.is_archived',
         'events.cancelled_at',
@@ -1995,7 +1994,7 @@ export async function buildApp(params: {
     const requiredConfirmText = `DELETE ${event.id}`;
 
     const start = toDateOnly(event.start_date);
-    const end = toDateOnly(event.end_date);
+    const end = toDateOnly(event.start_date);
 
     return render(reply, 'admin_event_delete.njk', {
       error,
@@ -2038,7 +2037,6 @@ export async function buildApp(params: {
         'events.title',
         'events.slug',
         'events.start_date',
-        'events.end_date',
         'organizations.name as organization_name',
         'users.email as manager_email'
       ])
@@ -2054,7 +2052,7 @@ export async function buildApp(params: {
       .execute();
 
     const start = toDateOnly(event.start_date);
-    const end = toDateOnly(event.end_date);
+    const end = toDateOnly(event.start_date);
 
     return render(reply, 'admin_event_reminders.njk', {
       ok,
@@ -2208,7 +2206,6 @@ export async function buildApp(params: {
         'events.slug',
         'events.title',
         'events.start_date',
-        'events.end_date',
         'events.purge_after_days',
         'events.is_published',
         'events.is_archived',
@@ -2242,7 +2239,7 @@ export async function buildApp(params: {
 
     const requiredConfirmText = `PURGE ${event.id}`;
     const start = toDateOnly(event.start_date);
-    const end = toDateOnly(event.end_date);
+    const end = toDateOnly(event.start_date);
     const defaultPurgeAfterDays = await getDefaultPurgeAfterDays();
 
     return render(reply, 'admin_event_purge.njk', {
@@ -2513,7 +2510,7 @@ export async function buildApp(params: {
     const currentUser = requireRole(req, 'event_manager');
     const events = await params.db
       .selectFrom('events')
-      .select(['id', 'slug', 'title', 'start_date', 'end_date', 'is_published', 'cancelled_at'])
+      .select(['id', 'slug', 'title', 'start_date', 'is_published', 'cancelled_at'])
       .where('manager_id', '=', currentUser.id)
       .where('is_archived', '=', false)
       .orderBy('start_date', 'desc')
@@ -2555,7 +2552,7 @@ export async function buildApp(params: {
     const mapped = events.map((e) => {
       const stats = statsByEvent.get(e.id) ?? { shiftCount: 0, filled: 0, capacity: 0 };
       const start = toDateOnly(e.start_date);
-      const end = toDateOnly(e.end_date);
+      const end = toDateOnly(e.start_date);
       return {
         id: e.id,
         title: e.title,
@@ -2979,7 +2976,6 @@ export async function buildApp(params: {
         'events.slug',
         'events.title',
         'events.start_date',
-        'events.end_date',
         'events.is_published',
         'events.is_archived',
         'events.cancelled_at',
@@ -2991,7 +2987,7 @@ export async function buildApp(params: {
 
     const mapEvent = (e: any) => {
       const start = toDateOnly(e.start_date);
-      const end = toDateOnly(e.end_date);
+      const end = toDateOnly(e.start_date);
       return {
         id: e.id,
         title: e.title,
@@ -3073,10 +3069,7 @@ export async function buildApp(params: {
           location_lat: draftCoords ? draftCoords.lat.toFixed(6) : null,
           location_lng: draftCoords ? draftCoords.lng.toFixed(6) : null,
           image_path: null,
-          event_type: 'one_time',
-          recurrence_rule: null,
           start_date: startDate,
-          end_date: startDate,
           purge_after_days: purgeAfterDays,
           is_published: false,
           is_archived: false
@@ -3116,7 +3109,6 @@ export async function buildApp(params: {
         'tags',
         'confirmation_email_note',
         'start_date',
-        'end_date',
         'description_html',
         'location_name',
         'location_map_url',
@@ -3199,7 +3191,7 @@ export async function buildApp(params: {
         tags: Array.isArray((event as any).tags) ? ((event as any).tags as string[]).join(', ') : '',
         confirmationEmailNote: event.confirmation_email_note ?? '',
         startDate: toDateOnly(event.start_date),
-        endDate: toDateOnly(event.end_date),
+        endDate: toDateOnly(event.start_date),
         description,
         locationName: event.location_name ?? '',
         locationMapUrl: event.location_map_url ?? '',
@@ -3250,7 +3242,6 @@ export async function buildApp(params: {
     const tags = parseTagsInput(String(body.tags ?? ''));
     const confirmationEmailNote = String(body.confirmationEmailNote ?? '');
     const startDate = String(body.startDate ?? '').trim();
-    const endDate = String(body.endDate ?? '').trim();
     const description = String(body.description ?? '');
     const locationName = String(body.locationName ?? '').trim();
     const locationMapUrl = String(body.locationMapUrl ?? '').trim();
@@ -3261,7 +3252,6 @@ export async function buildApp(params: {
       if (!organizationId) throw new Error('Organization is required.');
       if (confirmationEmailNote.length > 2000) throw new Error('Confirmation note is too long (max 2000 characters).');
       const sd = parseDateOnly(startDate);
-      const ed = parseDateOnly(endDate);
       const category = (isFeatured ? 'featured' : 'normal') as EventCategory;
       const draftCoords = parseCoordsFromMapUrl(locationMapUrl);
 
@@ -3307,7 +3297,6 @@ export async function buildApp(params: {
           tags,
           confirmation_email_note: confirmationEmailNote.trim() ? confirmationEmailNote.trim() : null,
           start_date: sd,
-          end_date: ed,
           description_html: descriptionTextToHtml(description),
           location_name: nextLocationName,
           location_map_url: nextLocationMapUrl,
@@ -4019,7 +4008,6 @@ export async function buildApp(params: {
           'signups.id as signup_id',
           'signups.email',
           'signups.first_name',
-          'signups.cancel_token',
           'shifts.id as shift_id',
           'shifts.role_name',
           'shifts.shift_date',
@@ -4039,7 +4027,8 @@ export async function buildApp(params: {
       let sent = 0;
 
       for (const r of recipients as any[]) {
-        const cancelUrl = r.cancel_token ? `${config.appUrl}/cancel/${encodeURIComponent(r.cancel_token)}` : '';
+        const cancelToken = await issueCancelTokenForSignup(params.db, r.signup_id);
+        const cancelUrl = `${config.appUrl}/cancel/${encodeURIComponent(cancelToken)}`;
         const shiftWhen = `${toDateOnly(r.shift_date)} ${String(r.start_time).slice(0, 5)}–${String(r.end_time).slice(0, 5)}`;
         const text = [
           `Hi ${String(r.first_name ?? '').trim() || 'volunteer'},`,
@@ -4049,7 +4038,7 @@ export async function buildApp(params: {
           `Event: ${event.title}`,
           `Shift: ${r.role_name} (${shiftWhen})`,
           `Event page: ${eventUrl}`,
-          cancelUrl ? `Need to cancel? ${cancelUrl}` : '',
+          `Need to cancel? ${cancelUrl}`,
           '',
           `— LocalShifts`
         ]
@@ -4452,7 +4441,6 @@ export async function buildApp(params: {
         'title',
         'description_html',
         'start_date',
-        'end_date',
         'is_published',
         'is_archived',
         'cancelled_at',
@@ -4481,15 +4469,15 @@ export async function buildApp(params: {
         'last_name',
         'email',
         'status',
-        'cancel_token',
+        'cancel_token_hash',
         'cancel_token_hmac',
         'cancel_token_expires_at',
         'created_at',
         'updated_at'
       ],
       sessions: ['id', 'user_id', 'data', 'expires_at', 'created_at', 'updated_at'],
-      volunteer_email_tokens: ['id', 'email', 'token_hmac', 'expires_at', 'used_at', 'created_at'],
-      notification_sends: ['id', 'kind', 'to_email', 'subject', 'body', 'status', 'error', 'created_at', 'sent_at']
+      volunteer_email_tokens: ['id', 'email', 'token_hmac', 'expires_at', 'first_used_at', 'created_at'],
+      notification_sends: ['id', 'kind', 'to_email', 'subject', 'body', 'status', 'error', 'created_at', 'sent_at', 'reminder_rule_id']
     };
 
     const missingTables: string[] = [];

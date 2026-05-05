@@ -5,6 +5,7 @@ import type { DB } from './db.js';
 import { sendEmail } from './email.js';
 import { buildReminderTemplateContext, renderReminderTemplate } from './reminder_templates.js';
 import { retryAsync } from './retry.js';
+import { issueCancelTokenForSignup } from './public.js';
 
 function dateOnlyKey(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -142,7 +143,6 @@ export async function sendUpcomingShiftReminders(params: {
       'signups.first_name',
       'signups.last_name',
       'signups.email',
-      'signups.cancel_token',
       'events.id as event_id',
       'events.title as event_title',
       'events.slug as event_slug',
@@ -185,7 +185,8 @@ export async function sendUpcomingShiftReminders(params: {
   let skipped = 0;
   for (const row of rows as any[]) {
     const eventUrl = `${config.appUrl}/events/${encodeURIComponent(row.event_slug ?? row.event_id)}`;
-    const cancelUrl = row.cancel_token ? `${config.appUrl}/cancel/${encodeURIComponent(row.cancel_token)}` : '';
+    const cancelToken = await issueCancelTokenForSignup(params.db, row.signup_id);
+    const cancelUrl = `${config.appUrl}/cancel/${encodeURIComponent(cancelToken)}`;
 
     const subjectTemplate = String(row.reminder_subject_template ?? '').trim()
       || 'Reminder: {{event_title}} ({{shift_date}} {{shift_start_time}}–{{shift_end_time}})';
@@ -263,7 +264,6 @@ export async function sendSignupConfirmationWithKind(db: Kysely<DB>, signupId: s
       'signups.id as signup_id',
       'signups.first_name',
       'signups.email',
-      'signups.cancel_token',
       'events.id as event_id',
       'events.title as event_title',
       'events.slug as event_slug',
@@ -280,9 +280,8 @@ export async function sendSignupConfirmationWithKind(db: Kysely<DB>, signupId: s
     .executeTakeFirst();
 
   if (!row) return;
-  if (!row.cancel_token) return;
-
-  const cancelUrl = `${config.appUrl}/cancel/${encodeURIComponent(row.cancel_token)}`;
+  const cancelToken = await issueCancelTokenForSignup(db, row.signup_id);
+  const cancelUrl = `${config.appUrl}/cancel/${encodeURIComponent(cancelToken)}`;
   const eventUrl = `${config.appUrl}/events/${encodeURIComponent((row as any).event_slug ?? row.event_id)}`;
   const subject = `Signup confirmed: ${row.event_title}`;
   const when = `${formatDateOnly(row.shift_date)} ${String(row.start_time).slice(0, 5)}–${String(row.end_time).slice(0, 5)}`;

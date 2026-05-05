@@ -3,7 +3,6 @@ import { config } from './config.js';
 import { createPgPool } from './pg.js';
 
 export type UserRole = 'super_admin' | 'event_manager';
-export type EventType = 'one_time' | 'recurring';
 export type EventCategory = string; // event_categories.slug
 export type SignupStatus = 'active' | 'cancelled';
 
@@ -50,10 +49,7 @@ export interface EventsTable {
   location_name: string | null;
   location_map_url: string | null;
   image_path: string | null;
-  event_type: EventType;
-  recurrence_rule: string | null;
   start_date: string; // YYYY-MM-DD
-  end_date: string; // YYYY-MM-DD
   is_published: boolean;
   is_archived: boolean;
   cancelled_at: string | null;
@@ -116,7 +112,6 @@ export interface SignupsTable {
   email: string;
   email_norm: Generated<string>;
   status: SignupStatus;
-  cancel_token: string | null;
   cancel_token_hash: string | null;
   cancel_token_hmac: Buffer;
   cancel_token_expires_at: string;
@@ -152,7 +147,6 @@ export interface VolunteerEmailTokensTable {
   email_norm: Generated<string>;
   token_hmac: Buffer;
   expires_at: string;
-  used_at: string | null;
   first_used_at: string | null;
   created_at: Generated<string>;
 }
