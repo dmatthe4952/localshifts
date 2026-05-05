@@ -15,7 +15,7 @@ async function main() {
       .selectFrom('events')
       .select((eb) => eb.fn.countAll<number>().as('c'))
       .where('is_archived', '=', false)
-      .where(sql<boolean>`end_date < current_date`)
+      .where(sql<boolean>`start_date < current_date`)
       .executeTakeFirst();
 
     const count = Number(eligible?.c ?? 0);
@@ -29,7 +29,7 @@ async function main() {
       .updateTable('events')
       .set({ is_archived: true, updated_at: sql`now()` })
       .where('is_archived', '=', false)
-      .where(sql<boolean>`end_date < current_date`)
+      .where(sql<boolean>`start_date < current_date`)
       .execute();
 
     // eslint-disable-next-line no-console
@@ -44,4 +44,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

@@ -124,6 +124,24 @@ function endOfDayPlusDaysUtc(date: Date, days: number): Date {
   return new Date(ms);
 }
 
+export async function issueCancelTokenForSignup(db: Kysely<DB>, signupId: string): Promise<string> {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const tokenHmac = crypto.createHmac('sha256', config.sessionSecret).update(rawToken).digest();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  await db
+    .updateTable('signups')
+    .set({
+      cancel_token_hash: tokenHash,
+      cancel_token_hmac: tokenHmac,
+      cancel_token_expires_at: expiresAt
+    })
+    .where('id', '=', signupId)
+    .where('status', '=', 'active')
+    .execute();
+  return rawToken;
+}
+
 export async function listPublicEvents(db: Kysely<DB>) {
   return listPublicEventsFiltered(db, {
     tag: null,
@@ -261,7 +279,6 @@ export async function listPublicEventsFiltered(
       'events.title',
       'events.is_featured',
       'events.start_date',
-      'events.end_date',
       'events.updated_at',
       'events.location_name',
       'events.description_html',
@@ -346,8 +363,7 @@ export async function listPublicEventsFiltered(
     const maxSlots = Number(r.max_slots ?? 0);
     const filledSlots = Number(r.filled_slots ?? 0);
     const openSlots = Math.max(0, maxSlots - filledSlots);
-    const sameDay = dateKey(r.start_date) === dateKey(r.end_date);
-    const dateRange = sameDay ? formatDateShort(r.start_date) : `${formatDateShort(r.start_date)} – ${formatDateShort(r.end_date)}`;
+    const dateRange = formatDateShort(r.start_date);
 
     const timeLabelRaw = typeof (r as any).first_shift_start_time === 'string' ? (r as any).first_shift_start_time : '';
     const endTimeRaw = typeof (r as any).first_shift_end_time === 'string' ? (r as any).first_shift_end_time : '';
@@ -418,7 +434,6 @@ export async function listPastPublicEvents(db: Kysely<DB>) {
       'events.slug',
       'events.title',
       'events.start_date',
-      'events.end_date',
       'events.updated_at',
       'events.location_name',
       'events.description_html',
@@ -441,13 +456,12 @@ export async function listPastPublicEvents(db: Kysely<DB>) {
         )
       `.as('tags')
     )
-    .orderBy('events.end_date', 'desc')
+    .orderBy('events.start_date', 'desc')
     .orderBy('events.title', 'asc')
     .execute();
 
   return rows.map((r) => {
-    const sameDay = dateKey(r.start_date) === dateKey(r.end_date);
-    const dateRange = sameDay ? formatDateShort(r.start_date) : `${formatDateShort(r.start_date)} – ${formatDateShort(r.end_date)}`;
+    const dateRange = formatDateShort(r.start_date);
     const descriptionText = htmlToPlainText(r.description_html);
     const descriptionShort = descriptionText.length > 220 ? `${descriptionText.slice(0, 217)}…` : descriptionText;
 
@@ -487,7 +501,6 @@ export async function getPublicEventBySlugOrIdForViewer(db: Kysely<DB>, slugOrId
       'events.location_map_url',
       'events.image_path',
       'events.start_date',
-      'events.end_date',
       'events.cancelled_at',
       'events.cancellation_message',
       'events.is_published',
@@ -537,18 +550,18 @@ export async function getPublicEventBySlugOrIdForViewer(db: Kysely<DB>, slugOrId
     .execute();
 
   const viewerEmailNorm = typeof viewerEmail === 'string' ? viewerEmail.trim().toLowerCase() : '';
-  const signupByShiftId = new Map<string, { cancelToken: string | null }>();
+  const signupByShiftId = new Map<string, { signupId: string }>();
   if (viewerEmailNorm && shifts.length) {
     const shiftIds = shifts.map((s) => s.id);
     const signups = await db
       .selectFrom('signups')
-      .select(['signups.shift_id', 'signups.cancel_token'])
+      .select(['signups.shift_id', 'signups.id'])
       .where('signups.status', '=', 'active')
       .where(sql<boolean>`signups.email_norm = ${viewerEmailNorm}`)
       .where('signups.shift_id', 'in', shiftIds)
       .execute();
 
-    for (const s of signups) signupByShiftId.set(s.shift_id, { cancelToken: s.cancel_token ?? null });
+    for (const s of signups) signupByShiftId.set(s.shift_id, { signupId: s.id });
   }
 
   return {
@@ -565,14 +578,12 @@ export async function getPublicEventBySlugOrIdForViewer(db: Kysely<DB>, slugOrId
     imagePath: event.image_path ?? '/event-images/default_volunteers.png',
     cancelledAt: event.cancelled_at,
     cancellationMessage: event.cancellation_message,
-    dateRange:
-      event.start_date === event.end_date
-        ? formatDate(event.start_date)
-        : `${formatDate(event.start_date)} – ${formatDate(event.end_date)}`,
-    shifts: shifts.map((s) => {
+    dateRange: formatDate(event.start_date),
+    shifts: await Promise.all(shifts.map(async (s) => {
       const filledSlots = Number(s.filled_slots ?? 0);
       const remaining = Math.max(0, s.max_volunteers - filledSlots);
       const viewerSignup = signupByShiftId.get(s.id);
+      const cancelUrl = viewerSignup ? `/cancel/${encodeURIComponent(await issueCancelTokenForSignup(db, viewerSignup.signupId))}` : null;
       return {
         id: s.id,
         roleName: s.role_name,
@@ -588,11 +599,11 @@ export async function getPublicEventBySlugOrIdForViewer(db: Kysely<DB>, slugOrId
         viewerSignup: viewerSignup
           ? {
               isSignedUp: true,
-              cancelUrl: viewerSignup.cancelToken ? `/cancel/${encodeURIComponent(viewerSignup.cancelToken)}` : null
+              cancelUrl
             }
           : { isSignedUp: false, cancelUrl: null }
       };
-    })
+    }))
   };
 }
 
@@ -662,7 +673,6 @@ export async function createSignup(params: {
           last_name: lastName,
           email,
           status: 'active',
-          cancel_token: rawToken,
           cancel_token_hash: tokenHash,
           cancel_token_hmac: tokenHmac,
           cancel_token_expires_at: expiresAt.toISOString()
@@ -706,7 +716,7 @@ export async function findActiveSignupByCancelToken(db: Kysely<DB>, rawToken: st
       'shifts.end_time',
       'events.title as event_title'
     ])
-    .where(sql<boolean>`(signups.cancel_token = ${rawToken} or signups.cancel_token_hash = ${tokenHash} or signups.cancel_token_hmac = ${tokenHmac})`)
+    .where(sql<boolean>`(signups.cancel_token_hash = ${tokenHash} or signups.cancel_token_hmac = ${tokenHmac})`)
     .executeTakeFirst();
 
   if (!row) return null;
@@ -754,7 +764,6 @@ export async function listViewerActiveSignups(db: Kysely<DB>, viewerEmail: strin
     .innerJoin('organizations', 'organizations.id', 'events.organization_id')
     .select([
       'signups.id as signup_id',
-      'signups.cancel_token',
       'events.title as event_title',
       'events.slug as event_slug',
       'events.id as event_id',
@@ -773,18 +782,23 @@ export async function listViewerActiveSignups(db: Kysely<DB>, viewerEmail: strin
     .orderBy('shifts.start_time', 'asc')
     .execute();
 
-  return rows.map((r) => ({
-    signupId: r.signup_id,
-    eventTitle: r.event_title,
-    eventUrl: eventUrl(r.event_slug, r.event_id),
-    organizationName: r.organization_name,
-    shiftRole: r.role_name,
-    shiftDate: formatDate(r.shift_date),
-    shiftTime: `${formatTime(r.start_time)} – ${formatTime(r.end_time)}`,
-    cancelUrl: r.cancel_token ? `/cancel/${encodeURIComponent(r.cancel_token)}` : null,
-    eventCancelledAt: r.event_cancelled_at,
-    eventCancellationMessage: r.event_cancellation_message
-  }));
+  const out = [];
+  for (const r of rows as any[]) {
+    const token = await issueCancelTokenForSignup(db, r.signup_id);
+    out.push({
+      signupId: r.signup_id,
+      eventTitle: r.event_title,
+      eventUrl: eventUrl(r.event_slug, r.event_id),
+      organizationName: r.organization_name,
+      shiftRole: r.role_name,
+      shiftDate: formatDate(r.shift_date),
+      shiftTime: `${formatTime(r.start_time)} – ${formatTime(r.end_time)}`,
+      cancelUrl: `/cancel/${encodeURIComponent(token)}`,
+      eventCancelledAt: r.event_cancelled_at,
+      eventCancellationMessage: r.event_cancellation_message
+    });
+  }
+  return out;
 }
 
 export async function requestMySignupsToken(db: Kysely<DB>, email: string) {
@@ -814,23 +828,21 @@ export async function verifyMySignupsToken(db: Kysely<DB>, rawToken: string) {
   const now = new Date();
   const nowIso = now.toISOString();
   // v2.3 behavior: token remains valid for full TTL and is not invalidated on use.
-  // We still set first_used_at (or legacy used_at) for audit only.
   const row = await db
     .selectFrom('volunteer_email_tokens')
-    .select(['email', 'expires_at', 'used_at', 'first_used_at'])
+    .select(['email', 'expires_at', 'first_used_at'])
     .where('token_hmac', '=', tokenHmac)
     .executeTakeFirst();
 
   if (!row) return null;
   if (Date.parse(row.expires_at) <= now.getTime()) return { expired: true as const };
 
-  const alreadyUsed = Boolean((row as any).first_used_at ?? row.used_at);
+  const alreadyUsed = Boolean((row as any).first_used_at);
   if (!alreadyUsed) {
     await db
       .updateTable('volunteer_email_tokens')
       .set({
-        first_used_at: nowIso,
-        used_at: nowIso
+        first_used_at: nowIso
       })
       .where('token_hmac', '=', tokenHmac)
       .where('first_used_at', 'is', null)

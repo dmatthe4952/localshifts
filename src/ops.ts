@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import { config } from './config.js';
 import type { DB } from './db.js';
 import { sendEmail } from './email.js';
+import { issueCancelTokenForSignup } from './public.js';
 
 export function requireAdminToken(req: any) {
   const token = req?.headers?.['x-admin-token'];
@@ -51,7 +52,6 @@ export async function cancelEventAndNotify(params: { db: Kysely<DB>; slugOrId: s
       'signups.id as signup_id',
       'signups.email',
       'signups.first_name',
-      'signups.cancel_token',
       'shifts.role_name',
       'shifts.shift_date',
       'shifts.start_time',
@@ -63,7 +63,8 @@ export async function cancelEventAndNotify(params: { db: Kysely<DB>; slugOrId: s
 
   let notified = 0;
   for (const s of signups) {
-    const cancelUrl = s.cancel_token ? `${config.appUrl}/cancel/${encodeURIComponent(s.cancel_token)}` : '';
+    const cancelToken = await issueCancelTokenForSignup(params.db, s.signup_id);
+    const cancelUrl = `${config.appUrl}/cancel/${encodeURIComponent(cancelToken)}`;
     const subject = `[CANCELLED] ${event.title}`;
     const text = [
       `Hello ${s.first_name},`,

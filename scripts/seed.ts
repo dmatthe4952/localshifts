@@ -99,9 +99,7 @@ async function main() {
           '<p>Help us pack and distribute food boxes for local families. Please choose one shift.</p><p><strong>Wear closed-toe shoes.</strong></p>',
         location_name: '123 Main St, Greenville SC',
         location_map_url: 'https://maps.google.com/',
-        event_type: 'one_time',
         start_date: startDate,
-        end_date: startDate,
         is_published: true,
         is_archived: false
       })
