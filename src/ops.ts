@@ -97,7 +97,7 @@ export async function cancelEventAndNotify(params: { db: Kysely<DB>; slugOrId: s
         body: text,
         status: 'queued'
       })
-      .onConflict((oc) => oc.columns(['kind', 'signup_id']).doNothing())
+      .onConflict((oc) => oc.doNothing())
       .returning(['id'])
       .executeTakeFirst();
 
